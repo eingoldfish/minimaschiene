@@ -16,6 +16,9 @@ const de = {
 
   // ----- header -----
   appTitle: 'Minimaschine',
+  footerVersion: 'Version vom',
+  footerBy: 'von',
+  footerProfileTitle: 'GitHub-Profil von eingoldfisch',
   detailed: 'Detailansicht',
   detailedTitle: 'Zeigt Werte zusätzlich hexadezimal/binär und den Opcode im Befehlsregister',
   animations: 'Animationen',
@@ -272,6 +275,9 @@ const en: Dictionary = {
   languageChanged: 'Language: English.',
 
   appTitle: 'Minimaschine',
+  footerVersion: 'Version',
+  footerBy: 'by',
+  footerProfileTitle: 'GitHub profile of eingoldfisch',
   detailed: 'Details',
   detailedTitle: 'Also shows values in hex/binary and the opcode in the instruction register',
   animations: 'Animations',

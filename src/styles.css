@@ -1919,6 +1919,33 @@ input[type='number'],
   border-radius: 0;
 }
 
+/* ---------- Footer: one quiet line under the memory ---------- */
+.app-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.5rem;
+  margin: 0 var(--gap) var(--gap);
+  padding: 0.6rem 0 0;
+  border-top: 1px dashed var(--border-strong);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.app-footer a {
+  color: var(--accent-strong);
+  text-underline-offset: 0.2em;
+}
+
+.app-footer a:hover {
+  color: var(--text);
+}
+
+:root.max-editor .app-footer,
+:root.max-machine .app-footer {
+  display: none;
+}
+
 /* ---------- Maximized editor on phones: no head strip offset ---------- */
 @media (max-width: 600px) {
   :root.max-editor .panel-editor .panel-head {

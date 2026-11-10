@@ -352,7 +352,16 @@ export class App {
       },
     });
     this.mainEl = h('main', { class: 'app-main' }, editorPanel, splitter, machinePanel, memoryPanel);
-    setChildren(root, header, this.statusEl, this.mainEl);
+
+    // ----- footer: version (date of the last commit, see vite.config.ts) and a link to the author -----
+    const [year, month, day] = __BUILD_DATE__.split('-');
+    const versionDate = this.language === 'de' ? `${day}.${month}.${year}` : __BUILD_DATE__;
+    const footer = h('footer', { class: 'app-footer' },
+      h('span', {}, 'Minimaschine Web'),
+      h('span', {}, `${d.footerVersion} ${versionDate}`, __BUILD_COMMIT__ ? h('span', { class: 'mono muted' }, ` · ${__BUILD_COMMIT__}`) : null),
+      h('span', {}, `${d.footerBy} `,
+        h('a', { href: 'https://github.com/eingoldfish', target: '_blank', rel: 'noopener', title: d.footerProfileTitle }, 'eingoldfisch')));
+    setChildren(root, header, this.statusEl, this.mainEl, footer);
     this.setSplit(this.splitPercent, false);
     this.updateMaximized();
 
