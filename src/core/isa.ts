@@ -9,8 +9,8 @@
  *   word 1 = modeCode * 256 + opcode   (high byte = addressing mode, low byte = opcode)
  *   word 2 = address part (0 for instructions without address)
  *
- * Status (M1): standard instruction set. Stack instructions and SP addressing
- * modes follow in M5 (their codes are not yet known).
+ * Status (M5): standard and extended instruction set, codes measured on the
+ * original. Only RSV and REL have own codes (they do not exist in the original).
  */
 
 /**
@@ -35,13 +35,22 @@ export type AddressingMode =
   | 'offsetIndirect'
   | 'immediateOffset';
 
+/**
+ * Start value of the stack pointer after "Zurücksetzen" (measured on the original, test 3b).
+ * The stack grows downwards: PUSH first decreases SP, then writes to Speicher[SP].
+ */
+export const SP_START = 65534;
+
 /** Numeric code of each addressing mode in the high byte of word 1. */
 const MODE_TO_CODE: Partial<Record<AddressingMode, number>> = {
   none: 0,
   direct: 1,
   immediate: 2,
   indirect: 3,
-  // TODO(M5): codes for offset, offsetIndirect, immediateOffset (test 3b)
+  // measured on the original (test 3b):
+  offset: 4,
+  offsetIndirect: 5,
+  immediateOffset: 6,
 };
 
 const CODE_TO_MODE = new Map<number, AddressingMode>(
@@ -49,7 +58,7 @@ const CODE_TO_MODE = new Map<number, AddressingMode>(
 );
 
 /** Rough grouping, used e.g. for the editor help and syntax colours. */
-export type InstructionGroup = 'memory' | 'arithmetic' | 'logic' | 'jump' | 'control';
+export type InstructionGroup = 'memory' | 'arithmetic' | 'logic' | 'jump' | 'control' | 'stack';
 
 /** Description of one machine instruction. */
 export interface InstructionDef {
@@ -68,12 +77,17 @@ export interface InstructionDef {
   readonly descriptionDe: string;
   /** Which flags are affected, in German. */
   readonly flagsDe: string;
+  /** Only available in extended mode (stack pointer). */
+  readonly extendedOnly?: boolean;
 }
 
 // Frequently used mode lists
 const NONE: readonly AddressingMode[] = ['none'];
-const DATA: readonly AddressingMode[] = ['direct', 'immediate', 'indirect'];
-const STORE_MODES: readonly AddressingMode[] = ['direct', 'indirect'];
+/** Modes that use the stack pointer (extended mode only). */
+export const SP_MODES: readonly AddressingMode[] = ['offset', 'offsetIndirect', 'immediateOffset'];
+const DATA: readonly AddressingMode[] = ['direct', 'immediate', 'indirect', 'offset', 'offsetIndirect', 'immediateOffset'];
+const STORE_MODES: readonly AddressingMode[] = ['direct', 'indirect', 'offset', 'offsetIndirect'];
+const NUMBER: readonly AddressingMode[] = ['immediate'];
 const JUMP: readonly AddressingMode[] = ['direct'];
 
 const FLAGS_ARITH = 'Z, N nach dem Ergebnis; V bei Überlauf mit Vorzeichen; C bei Überlauf ohne Vorzeichen';
@@ -177,6 +191,24 @@ export const INSTRUCTIONS: readonly InstructionDef[] = [
     descriptionDe: 'Schiebt die Bits im Akku nach rechts, das Vorzeichenbit bleibt erhalten.', flagsDe: FLAGS_ZN },
   { mnemonic: 'NOT', aliases: [], opcode: 56, modes: NONE, group: 'logic',
     descriptionDe: 'Kehrt alle Bits im Akku um.', flagsDe: FLAGS_ZN },
+
+  // ----- extended mode: stack -----
+  // JSR, RTS, PUSH, POP: measured on the original (test 3b).
+  // RSV, REL: do not exist in the original (point 22) -> own free codes 27 and 28.
+  { mnemonic: 'JSR', aliases: ['CALL'], opcode: 5, modes: JUMP, group: 'jump', extendedOnly: true,
+    descriptionDe: 'Unterprogramm aufrufen: SP − 1, die Rücksprungadresse (Adresse des nächsten Befehls) kommt auf den Stack, dann Sprung zur angegebenen Adresse.',
+    flagsDe: FLAGS_NONE },
+  { mnemonic: 'RTS', aliases: ['RETURN'], opcode: 6, modes: NONE, group: 'stack', extendedOnly: true,
+    descriptionDe: 'Rücksprung aus einem Unterprogramm: Die Adresse oben auf dem Stack kommt in den Befehlszähler, dann SP + 1.',
+    flagsDe: FLAGS_NONE },
+  { mnemonic: 'PUSH', aliases: [], opcode: 25, modes: NONE, group: 'stack', extendedOnly: true,
+    descriptionDe: 'Legt den Akku auf den Stack: SP − 1, dann Akku → Speicher[SP].', flagsDe: FLAGS_NONE },
+  { mnemonic: 'POP', aliases: [], opcode: 26, modes: NONE, group: 'stack', extendedOnly: true,
+    descriptionDe: 'Holt den obersten Wert vom Stack in den Akku: Speicher[SP] → Akku, dann SP + 1.', flagsDe: FLAGS_ZN },
+  { mnemonic: 'RSV', aliases: [], opcode: 27, modes: NUMBER, immediateMnemonic: 'RSV', group: 'stack', extendedOnly: true,
+    descriptionDe: 'Reserviert Platz auf dem Stack: SP − Zahl (z. B. für lokale Variablen).', flagsDe: FLAGS_NONE },
+  { mnemonic: 'REL', aliases: [], opcode: 28, modes: NUMBER, immediateMnemonic: 'REL', group: 'stack', extendedOnly: true,
+    descriptionDe: 'Gibt Platz auf dem Stack wieder frei: SP + Zahl.', flagsDe: FLAGS_NONE },
 ];
 
 // ---------- Lookup tables ----------
@@ -199,13 +231,10 @@ for (const def of INSTRUCTIONS) {
   }
 }
 
-/**
- * Mnemonics of the extended mode (stack). Not yet in INSTRUCTIONS because
- * their opcodes are still unknown (M5); listed here for helpful error messages.
- */
-export const EXTENDED_MNEMONICS: readonly string[] = [
-  'JSR', 'CALL', 'RTS', 'RETURN', 'PUSH', 'POP', 'RSV', 'REL',
-];
+/** All names (incl. aliases) of instructions that exist only in extended mode. */
+export const EXTENDED_MNEMONICS: readonly string[] = INSTRUCTIONS
+  .filter((d) => d.extendedOnly)
+  .flatMap((d) => [d.mnemonic, ...d.aliases]);
 
 /** Pseudo instruction that reserves one memory cell. */
 export const WORD_DIRECTIVE = 'WORD';

@@ -175,7 +175,8 @@ const execLineField = StateField.define<DecorationSet>({
 
 function exampleFor(def: InstructionDef, name: string): string {
   if (def.modes.includes('none')) return name;
-  if (name !== def.mnemonic && name === def.immediateMnemonic) return `${name} 5`;
+  if (name === def.immediateMnemonic) return `${name} 5`;
+  if (def.mnemonic === 'JSR') return `${name} Unterprogramm`;
   if (def.group === 'jump') return `${name} Schleife`;
   if (def.mnemonic === 'STORE') return `${name} Ergebnis`;
   return `${name} Wert`;
@@ -198,19 +199,16 @@ function helpTooltip(word: string): HTMLElement | null {
     add('code', 'Zähler: WORD 0');
     return box;
   }
-  if (EXTENDED_MNEMONICS.includes(upper)) {
-    add('strong', upper);
-    add('p', 'Stackbefehl – gibt es nur im erweiterten Modus.');
-    return box;
-  }
   const found = lookupMnemonic(word);
   if (!found) return null;
   const { def } = found;
   const names = [def.mnemonic, ...def.aliases].join(' / ');
-  add('strong', found.forcedMode ? `${upper} (= ${def.mnemonic} $Zahl)` : names);
+  const isOwnShortForm = def.immediateMnemonic === def.mnemonic; // RSV, REL
+  add('strong', found.forcedMode && !isOwnShortForm ? `${upper} (= ${def.mnemonic} $Zahl)` : names);
+  if (def.extendedOnly) add('p', 'Nur im erweiterten Modus.', 'cm-help-flags');
   add('p', def.descriptionDe);
   add('p', `Flags: ${def.flagsDe}`, 'cm-help-flags');
-  if (!found.forcedMode && def.immediateMnemonic) {
+  if (!found.forcedMode && def.immediateMnemonic && !isOwnShortForm) {
     add('p', `Mit fester Zahl: ${def.immediateMnemonic} 5`, 'cm-help-flags');
   }
   add('code', `Beispiel: ${exampleFor(def, upper)}`);

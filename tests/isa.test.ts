@@ -5,15 +5,19 @@ describe('instruction table', () => {
   it('has unique opcodes and mnemonics', () => {
     const opcodes = INSTRUCTIONS.map((d) => d.opcode);
     expect(new Set(opcodes).size).toBe(opcodes.length);
-    const names = INSTRUCTIONS.flatMap((d) => [d.mnemonic, ...d.aliases, d.immediateMnemonic ?? []].flat());
+    // RSV/REL: the "immediate short form" has the same name as the instruction itself.
+    const names = INSTRUCTIONS.flatMap((d) => [
+      d.mnemonic, ...d.aliases, ...(d.immediateMnemonic && d.immediateMnemonic !== d.mnemonic ? [d.immediateMnemonic] : []),
+    ]);
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('contains every standard mnemonic from manual 3.4', () => {
+  it('contains every mnemonic from manual 3.4 (incl. extended mode)', () => {
     const all = `HOLD HALT RESET NOOP LOAD LOADC STORE ADD SUB MUL DIV DIVU MOD MODU CMP MULH MULHU
       AND OR XOR NOT SHL SHR SHRA JMPP JMPNN JMPN JMPNP JMPZ JMPNZ JMPV JMPC JMP
       JGT JGE JLT JLE JEQ JNE JOV JOC JHI JHS JLO JLS
-      ADDI SUBI MULI DIVI DIVUI MODI MODUI CMPI MULHI MULHUI LOADI ANDI ORI XORI SHLI SHRI SHRAI`;
+      ADDI SUBI MULI DIVI DIVUI MODI MODUI CMPI MULHI MULHUI LOADI ANDI ORI XORI SHLI SHRI SHRAI
+      JSR RTS PUSH POP RSV REL CALL RETURN`;
     for (const name of all.split(/\s+/)) {
       expect(lookupMnemonic(name), name).toBeDefined();
     }
@@ -33,6 +37,8 @@ describe('instruction table', () => {
   it('finds instructions by opcode', () => {
     expect(lookupOpcode(0x14)?.mnemonic).toBe('LOAD');
     expect(lookupOpcode(99)?.mnemonic).toBe('HALT');
+    expect(lookupOpcode(5)?.mnemonic).toBe('JSR'); // measured (test 3b)
+    expect(lookupOpcode(6)?.mnemonic).toBe('RTS');
     expect(lookupOpcode(2)).toBeUndefined();
   });
 });

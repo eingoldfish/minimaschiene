@@ -952,3 +952,23 @@ button.is-busy {
   color: var(--accent-text);
   font-weight: 600;
 }
+
+/* Parts of the extended mode are only shown when it is switched on */
+.diagram .extended-only {
+  display: none;
+}
+
+.diagram.show-extended .extended-only {
+  display: inline;
+}
+
+.d-mem-row.is-sp rect,
+.mem-cell.is-sp {
+  box-shadow: inset 0 -3px 0 var(--syn-number);
+}
+
+.d-mem-row.is-sp rect {
+  stroke: var(--syn-number);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}

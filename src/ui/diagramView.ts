@@ -39,7 +39,16 @@ const ROUTES: Record<FlowRoute, readonly Point[]> = {
   'alu→flags': [[120, 240], [120, 290]],
   'flags→acc': [[40, 315], [25, 315], [25, 75], [40, 75]],
   'acc→mem': [[120, 50], [120, 28], [470, 28], [470, 120], [560, 120]],
+  // extended mode (stack pointer)
+  'sp→mem': [[440, 315], [500, 315], [500, 210], [560, 210]],
+  'sp→addr': [[440, 305], [452, 305], [452, 182], [440, 182]],
+  'ir→sp': [[440, 92], [460, 92], [460, 328], [440, 328]],
+  'mem→pc': [[560, 120], [470, 120], [470, 257], [440, 257]],
+  'pc→data': [[440, 257], [470, 257], [470, 120], [560, 120]],
 };
+
+/** Routes that only exist in extended mode. */
+const SP_ROUTES = new Set<FlowRoute>(['sp→mem', 'sp→addr', 'ir→sp', 'mem→pc', 'pc→data']);
 
 /** Milliseconds a value needs for one route. */
 const FLOW_MS = 750;
@@ -71,6 +80,7 @@ export class DiagramView {
   /** State and context of the last update(), used by play(). */
   private lastState: Readonly<CpuState> | null = null;
   private lastCtx: DiagramContext | null = null;
+  private extended = false;
 
   constructor() {
     const root = svg('svg', {
@@ -89,7 +99,9 @@ export class DiagramView {
 
     // ----- wires (all routes, drawn faintly) -----
     const wires = svg('g', { class: 'd-wires' });
-    for (const pts of Object.values(ROUTES)) wires.append(svg('polyline', { points: pointsAttr(pts) }));
+    for (const [route, pts] of Object.entries(ROUTES) as Array<[FlowRoute, readonly Point[]]>) {
+      wires.append(svg('polyline', { points: pointsAttr(pts), class: SP_ROUTES.has(route) ? 'extended-only' : '' }));
+    }
     root.append(wires);
 
     // ----- buses -----
@@ -145,6 +157,10 @@ export class DiagramView {
     this.addBox('pc', 255, 220, 185, 50, 'Befehlszähler (PC)');
     this.texts['pc'] = this.addValue(347, 260, 'd-value');
 
+    // ----- stack pointer (extended mode only) -----
+    this.addBox('sp', 255, 290, 185, 50, 'Stackpointer (SP)', 'extended-only');
+    this.texts['sp'] = this.addValue(347, 330, 'd-value extended-only');
+
     // ----- memory -----
     const mem = svg('rect', { x: 560, y: 30, width: 150, height: 370, rx: 8, class: 'd-part' });
     this.parts.set('memory', mem);
@@ -172,6 +188,7 @@ export class DiagramView {
     const t = this.texts;
     t['acc']!.textContent = String(toSigned16(state.a));
     t['pc']!.textContent = String(state.pc);
+    t['sp']!.textContent = String(state.sp);
 
     // Instruction register: show what has been fetched so far.
     const ir = state.ir;
@@ -243,6 +260,7 @@ export class DiagramView {
       row.label.textContent = ctx.labelAt(address) ?? '';
       row.group.classList.toggle('accessed', address === b.address);
       row.group.classList.toggle('is-pc', address === state.pc);
+      row.group.classList.toggle('is-sp', this.extended && address === state.sp);
     });
   }
 
@@ -331,11 +349,17 @@ export class DiagramView {
 
   // ---------- helpers ----------
 
-  private addBox(part: MachinePart, x: number, y: number, w: number, h: number, label: string): void {
-    const rect = svg('rect', { x, y, width: w, height: h, rx: 6, class: 'd-part' });
+  private addBox(part: MachinePart, x: number, y: number, w: number, h: number, label: string, extraClass = ''): void {
+    const rect = svg('rect', { x, y, width: w, height: h, rx: 6, class: `d-part ${extraClass}` });
     this.parts.set(part, rect);
     this.element.append(rect);
-    this.element.append(svg('text', { x: x + 8, y: y + 17, class: 'd-label' }, label));
+    this.element.append(svg('text', { x: x + 8, y: y + 17, class: `d-label ${extraClass}` }, label));
+  }
+
+  /** Shows or hides the parts of the extended mode (stack pointer). */
+  setExtended(extended: boolean): void {
+    this.extended = extended;
+    this.element.classList.toggle('show-extended', extended);
   }
 
   private addValue(x: number, y: number, cls: string): SVGTextElement {

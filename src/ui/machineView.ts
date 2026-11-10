@@ -7,6 +7,7 @@ import {
   encodeWord1,
   formatWord,
   lookupOpcode,
+  SP_START,
   toBinary16,
   toHex16,
   toSigned16,
@@ -23,6 +24,8 @@ export interface MachineViewOptions {
   currentLine: number | undefined;
   /** False before the first instruction was executed (IR still empty). */
   hasExecuted: boolean;
+  /** Extended mode: show the stack pointer. */
+  extended: boolean;
   /** Label name for an address, to show "STORE Produkt" instead of "STORE 24". */
   labelAt(address: number): string | undefined;
 }
@@ -90,7 +93,16 @@ export class MachineView {
     const halted = h('div', { class: `machine-state${state.halted === 'none' ? '' : ' halted'}` },
       'Maschine: ', h('strong', {}, HALT_STATUS[state.halted]));
 
-    setChildren(this.element, acc, pc, irBox, status, halted);
+    // ----- stack pointer (extended mode) -----
+    let sp: HTMLElement | null = null;
+    if (opts.extended) {
+      sp = this.register('Stackpointer (SP)', String(state.sp),
+        'Zeigt auf den obersten Wert des Stacks. Der Stack wächst nach unten: PUSH verringert SP, POP erhöht ihn.');
+      sp.append(h('div', { class: 'reg-note' },
+        state.sp === SP_START ? 'Stack ist leer' : `oberster Wert in Zelle ${state.sp}: ${toSigned16(state.memory[state.sp] ?? 0)}`));
+    }
+
+    setChildren(this.element, acc, pc, sp, irBox, status, halted);
   }
 
   private register(label: string, value: string, help: string, extraClass = ''): HTMLElement {

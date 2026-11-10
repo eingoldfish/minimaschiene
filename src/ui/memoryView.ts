@@ -21,6 +21,8 @@ export type MemoryFormat = 'signed' | 'unsigned' | 'hex' | 'opcodes';
 export interface MemoryViewOptions {
   format: MemoryFormat;
   hexAddresses: boolean;
+  /** Address the stack pointer points to (extended mode), or null. */
+  sp: number | null;
   labelAt(address: number): string | undefined;
 }
 
@@ -111,6 +113,8 @@ export class MemoryView {
     const classes = ['mem-cell'];
     if (isPc) classes.push('is-pc');
     if (address === state.lastWrite) classes.push('is-written');
+    const isSp = opts.sp !== null && address === opts.sp;
+    if (isSp) classes.push('is-sp');
 
     let text: string;
     let instruction = '';
@@ -131,6 +135,7 @@ export class MemoryView {
       `Inhalt: ${toSigned16(word)} · ${word} · ${toHex16(word)}`,
       instruction ? `als Befehl: ${instruction}` : '',
       isPc ? 'Hier steht der nächste Befehl (PC).' : '',
+      isSp ? 'Hierauf zeigt der Stackpointer (SP).' : '',
       address === state.lastWrite ? 'Zuletzt geändert.' : '',
       'Klicken zum Ändern.',
     ].filter(Boolean).join('\n');

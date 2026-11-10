@@ -232,7 +232,8 @@ describe('error messages', () => {
     expect(errs('LOAD 2(SP)')[0]).toMatch(/gibt es nur im erweiterten Modus/);
     expect(errs('LOAD @2(SP)')[0]).toMatch(/‚@Adresse\(SP\)‘ gibt es nur im erweiterten Modus/);
     expect(errs('PUSH')[0]).toMatch(/‚PUSH‘ gibt es nur im erweiterten Modus/);
-    expect(errs('PUSH', true)[0]).toMatch(/noch nicht unterstützt/);
+    expect(errs('PUSH', true)).toEqual([]);
+    expect(errs('LOAD 2(SP)', true)).toEqual([]);
   });
 
   it('numbers out of range and negative addresses', () => {

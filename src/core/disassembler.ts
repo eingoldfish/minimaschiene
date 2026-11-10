@@ -45,9 +45,12 @@ export function disassemble(word1: number, word2: number, labelAt?: LabelLookup)
       return { valid: true, text: `${def.mnemonic} ${addressText()}`, mnemonic: def.mnemonic, mode };
     case 'indirect':
       return { valid: true, text: `${def.mnemonic} (${addressText()})`, mnemonic: def.mnemonic, mode };
-    default:
-      // SP modes follow in M5.
-      return { valid: true, text: `${def.mnemonic} ?`, mnemonic: def.mnemonic, mode };
+    case 'offset':
+      return { valid: true, text: `${def.mnemonic} ${toSigned16(word2)}(SP)`, mnemonic: def.mnemonic, mode };
+    case 'offsetIndirect':
+      return { valid: true, text: `${def.mnemonic} @${toSigned16(word2)}(SP)`, mnemonic: def.mnemonic, mode };
+    case 'immediateOffset':
+      return { valid: true, text: `${def.mnemonic} $${toSigned16(word2)}(SP)`, mnemonic: def.mnemonic, mode };
   }
 }
 

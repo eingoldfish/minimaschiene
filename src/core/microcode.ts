@@ -21,10 +21,10 @@ import { alu, ALU_INSTRUCTIONS, ALU_SYMBOLS, JUMP_CONDITIONS, type AluOp, type F
 import type { CpuState, CyclePhase, InstructionRegister } from './cpu';
 import { disassemble } from './disassembler';
 import { toSigned16, WORD_MASK } from './format';
-import { decodeWord1, type AddressingMode } from './isa';
+import { decodeWord1, SP_START, type AddressingMode } from './isa';
 
 /** Parts of the machine that can light up in the picture. */
-export type MachinePart = 'pc' | 'ir' | 'decoder' | 'acc' | 'alu' | 'flags' | 'memory';
+export type MachinePart = 'pc' | 'sp' | 'ir' | 'decoder' | 'acc' | 'alu' | 'flags' | 'memory';
 
 /**
  * Paths along which a value travels in the picture. The UI decides how
@@ -43,7 +43,12 @@ export type FlowRoute =
   | 'alu→acc' // ALU result → accumulator
   | 'alu→flags' // ALU → status register
   | 'flags→acc' // carry flag → accumulator (LOADC)
-  | 'acc→mem'; // accumulator → data bus → memory (STORE)
+  | 'acc→mem' // accumulator → data bus → memory (STORE)
+  | 'sp→mem' // stack pointer puts an address on the address bus
+  | 'sp→addr' // stack pointer → control unit (address = address part + SP)
+  | 'ir→sp' // number from the address part → stack pointer (RSV/REL)
+  | 'mem→pc' // memory → data bus → PC (RTS)
+  | 'pc→data'; // PC → data bus → memory (JSR saves the return address)
 
 export interface Flow {
   route: FlowRoute;
@@ -222,18 +227,45 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array): P
 
   // ----- Ausführen -----
 
-  // Indirect addressing: first look up the real address in memory.
+  const sp = start.sp;
+  const spMinus1 = (sp - 1) & WORD_MASK;
+  const spPlus1 = (sp + 1) & WORD_MASK;
+
+  // Stack instructions (extended mode)
+  const stackSteps = planStackInstruction(name, { start, word2, pc0, pc2, sp, spMinus1, spPlus1, read });
+  if (stackSteps) return [...steps, ...stackSteps];
+
+  // SP-relative addressing: first compute address part + SP.
   let address = word2;
-  if (mode === 'indirect') {
-    const target = read(word2);
+  if (mode === 'offset' || mode === 'offsetIndirect' || mode === 'immediateOffset') {
+    const sum = (word2 + sp) & WORD_MASK;
+    steps.push({
+      event: {
+        phase: 'execute',
+        title: 'Ausführen: Adresse berechnen',
+        explanation: `Adressierung relativ zum Stackpointer: Adressteil ${word2} + SP ${sp} = ${sum}.`
+          + (mode === 'immediateOffset' ? ' Diese Summe ist selbst der Operand.' : ''),
+        bus: {},
+        flows: [{ route: 'sp→addr', label: String(sp) }],
+        active: ['sp', 'decoder'],
+      },
+      apply() {},
+    });
+    address = sum;
+  }
+
+  // Indirect addressing: first look up the real address in memory.
+  if (mode === 'indirect' || mode === 'offsetIndirect') {
+    const lookupAt = address;
+    const target = read(lookupAt);
     steps.push({
       event: {
         phase: 'execute',
         title: 'Ausführen: Adresse nachschlagen',
-        explanation: `Indirekte Adressierung: In Zelle ${word2} steht erst die eigentliche Adresse. `
+        explanation: `Indirekte Adressierung: In Zelle ${lookupAt} steht erst die eigentliche Adresse. `
           + `Das Steuerwerk liest sie über den Datenbus: ${target}.`,
-        bus: { address: word2, data: target, control: 'lesen' },
-        flows: [{ route: 'addr→mem', label: String(word2) }, { route: 'mem→decoder', label: String(target) }],
+        bus: { address: lookupAt, data: target, control: 'lesen' },
+        flows: [{ route: 'addr→mem', label: String(lookupAt) }, { route: 'mem→decoder', label: String(target) }],
         active: ['decoder', 'memory'],
       },
       apply() {},
@@ -291,7 +323,7 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array): P
     const info = {
       NOOP: ['Ausführen: nichts tun', 'NOOP tut nichts. Es geht mit dem nächsten Befehl weiter.'],
       HALT: ['Ausführen: anhalten', 'HALT: Die Maschine hält an. Das Programm ist zu Ende.'],
-      RESET: ['Ausführen: zurücksetzen', 'RESET: Akku, Befehlszähler, Befehlsregister und Flags werden 0, die Maschine hält an. Der Speicher bleibt erhalten.'],
+      RESET: ['Ausführen: zurücksetzen', 'RESET: Akku, Befehlszähler, Befehlsregister und Flags werden 0, der Stackpointer wird auf seinen Startwert gesetzt, die Maschine hält an. Der Speicher bleibt erhalten.'],
     }[name];
     steps.push({
       event: { phase: 'execute', title: info[0]!, explanation: info[1]!, bus: {}, flows: [], active: ['decoder'] },
@@ -303,6 +335,7 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array): P
           s.pc = 0;
           s.flags = { z: false, n: false, v: false, c: false };
           s.ir = { opcode: 0, mode: 'none', address: 0 };
+          s.sp = SP_START;
           s.lastWrite = null;
           s.halted = 'reset';
         }
@@ -339,7 +372,9 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array): P
 
   // Operand
   let b = 0;
-  if (mode === 'immediate') {
+  if (mode === 'immediateOffset') {
+    b = address; // address part + SP, computed above
+  } else if (mode === 'immediate') {
     b = word2;
     steps.push({
       event: {
@@ -353,7 +388,7 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array): P
       },
       apply() {},
     });
-  } else if (mode === 'direct' || mode === 'indirect') {
+  } else if (mode !== 'none') {
     b = read(address);
     steps.push({
       event: {
@@ -416,4 +451,178 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array): P
     },
   });
   return steps;
+}
+
+interface StackContext {
+  start: InstructionStart;
+  word2: number;
+  pc0: number;
+  pc2: number;
+  sp: number;
+  spMinus1: number;
+  spPlus1: number;
+  read(address: number): number;
+}
+
+/** Micro steps of the execute phase of stack instructions, or null for other instructions. */
+function planStackInstruction(name: string, c: StackContext): PlannedMicroStep[] | null {
+  const decSp = (why: string): PlannedMicroStep => ({
+    event: {
+      phase: 'execute',
+      title: 'Ausführen: SP verringern',
+      explanation: `${why} Der Stackpointer wird um 1 verringert: ${c.sp} − 1 = ${c.spMinus1}. `
+        + 'Der Stack wächst also nach unten.',
+      bus: {},
+      flows: [],
+      active: ['sp'],
+    },
+    apply(s) {
+      s.sp = c.spMinus1;
+    },
+  });
+  const incSp: PlannedMicroStep = {
+    event: {
+      phase: 'execute',
+      title: 'Ausführen: SP erhöhen',
+      explanation: `Der Stackpointer wird um 1 erhöht: ${c.sp} + 1 = ${c.spPlus1}. Der oberste Platz auf dem Stack ist wieder frei.`,
+      bus: {},
+      flows: [],
+      active: ['sp'],
+    },
+    apply(s) {
+      s.sp = c.spPlus1;
+    },
+  };
+
+  switch (name) {
+    case 'PUSH':
+      return [
+        decSp('PUSH legt den Akku auf den Stack.'),
+        {
+          event: {
+            phase: 'execute',
+            title: 'Ausführen: auf den Stack schreiben',
+            explanation: `Der Stackpointer (${c.spMinus1}) kommt auf den Adressbus, der Steuerbus meldet „schreiben“. `
+              + `Der Akku legt ${s16(c.start.a)} auf den Datenbus, der Speicher legt den Wert in Zelle ${c.spMinus1} ab.`,
+            bus: { address: c.spMinus1, data: c.start.a, control: 'schreiben' },
+            flows: [{ route: 'sp→mem', label: String(c.spMinus1) }, { route: 'acc→mem', label: s16(c.start.a) }],
+            active: ['sp', 'acc', 'memory'],
+          },
+          apply(_s, env) {
+            env.write(c.spMinus1, c.start.a);
+          },
+        },
+      ];
+
+    case 'POP': {
+      const value = c.read(c.sp);
+      const res = alu('PASS', c.start.a, value)!;
+      return [
+        {
+          event: {
+            phase: 'execute',
+            title: 'Ausführen: vom Stack lesen',
+            explanation: `Der Stackpointer (${c.sp}) kommt auf den Adressbus (Steuerbus: lesen). `
+              + `Der Speicher liefert den obersten Stackwert ${s16(value)} über den Datenbus.`,
+            bus: { address: c.sp, data: value, control: 'lesen' },
+            flows: [{ route: 'sp→mem', label: String(c.sp) }, { route: 'mem→aluB', label: s16(value) }],
+            active: ['sp', 'memory', 'alu'],
+          },
+          apply() {},
+        },
+        {
+          event: {
+            phase: 'execute',
+            title: 'Ausführen: Laden',
+            explanation: `Der Wert ${s16(value)} wird in den Akku übernommen. Neue Flags: ${flagText(res.flags)}.`,
+            bus: {},
+            alu: { a: c.start.a, b: value, op: ALU_SYMBOLS.PASS, result: res.result },
+            flows: [{ route: 'alu→acc', label: s16(res.result) }, { route: 'alu→flags', label: flagText(res.flags) }],
+            active: ['alu', 'acc', 'flags'],
+          },
+          apply(s) {
+            s.a = res.result;
+            s.flags = res.flags;
+          },
+        },
+        incSp,
+      ];
+    }
+
+    case 'JSR':
+      return [
+        decSp('JSR ruft ein Unterprogramm auf und merkt sich vorher, wohin es danach zurückgehen soll.'),
+        {
+          event: {
+            phase: 'execute',
+            title: 'Ausführen: Rücksprungadresse sichern',
+            explanation: `Die Adresse des nächsten Befehls (${c.pc2}) wird auf den Stack geschrieben: `
+              + `Adressbus ${c.spMinus1}, Datenbus ${c.pc2}, Steuerbus „schreiben“.`,
+            bus: { address: c.spMinus1, data: c.pc2, control: 'schreiben' },
+            flows: [{ route: 'sp→mem', label: String(c.spMinus1) }, { route: 'pc→data', label: String(c.pc2) }],
+            active: ['sp', 'pc', 'memory'],
+          },
+          apply(_s, env) {
+            env.write(c.spMinus1, c.pc2);
+          },
+        },
+        {
+          event: {
+            phase: 'execute',
+            title: 'Ausführen: Sprung ins Unterprogramm',
+            explanation: `Der Adressteil ${c.word2} wird in den Befehlszähler geladen – weiter geht es im Unterprogramm.`,
+            bus: {},
+            flows: [{ route: 'ir→pc', label: String(c.word2) }],
+            active: ['decoder', 'pc'],
+          },
+          apply(s) {
+            s.pc = c.word2;
+          },
+        },
+      ];
+
+    case 'RTS': {
+      const target = c.read(c.sp);
+      return [
+        {
+          event: {
+            phase: 'execute',
+            title: 'Ausführen: Rücksprungadresse holen',
+            explanation: `Der Stackpointer (${c.sp}) kommt auf den Adressbus (Steuerbus: lesen). `
+              + `Der Speicher liefert die gemerkte Rücksprungadresse ${target}, sie kommt in den Befehlszähler.`,
+            bus: { address: c.sp, data: target, control: 'lesen' },
+            flows: [{ route: 'sp→mem', label: String(c.sp) }, { route: 'mem→pc', label: String(target) }],
+            active: ['sp', 'memory', 'pc'],
+          },
+          apply(s) {
+            s.pc = target;
+          },
+        },
+        incSp,
+      ];
+    }
+
+    case 'RSV':
+    case 'REL': {
+      const next = name === 'RSV' ? (c.sp - c.word2) & WORD_MASK : (c.sp + c.word2) & WORD_MASK;
+      return [{
+        event: {
+          phase: 'execute',
+          title: name === 'RSV' ? 'Ausführen: Platz reservieren' : 'Ausführen: Platz freigeben',
+          explanation: name === 'RSV'
+            ? `RSV reserviert ${c.word2} Zellen auf dem Stack: SP ${c.sp} − ${c.word2} = ${next}.`
+            : `REL gibt ${c.word2} Zellen auf dem Stack frei: SP ${c.sp} + ${c.word2} = ${next}.`,
+          bus: {},
+          flows: [{ route: 'ir→sp', label: String(c.word2) }],
+          active: ['ir', 'sp'],
+        },
+        apply(s) {
+          s.sp = next;
+        },
+      }];
+    }
+
+    default:
+      return null;
+  }
 }

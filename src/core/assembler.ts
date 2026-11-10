@@ -19,7 +19,6 @@ import { MEMORY_SIZE, toUnsigned16 } from './format';
 import {
   allMnemonicNames,
   encodeWord1,
-  EXTENDED_MNEMONICS,
   isReservedName,
   lookupMnemonic,
   WORD_DIRECTIVE,
@@ -563,14 +562,6 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
     // ----- look up the instruction -----
     const found = lookupMnemonic(op.name);
     if (!found) {
-      if (EXTENDED_MNEMONICS.includes(upper)) {
-        err(line, op.column, op.name.length,
-          options.extended
-            ? `Der Befehl ‚${op.name}‘ wird noch nicht unterstützt.`
-            : `Den Befehl ‚${op.name}‘ gibt es nur im erweiterten Modus.`,
-          options.extended ? undefined : 'Schalte „Erweiterter Modus“ ein, um Stackbefehle zu benutzen.');
-        continue;
-      }
       const suggestion = suggestMnemonic(op.name);
       const hint = suggestion
         ? `Meintest du ‚${suggestion}‘?`
@@ -581,6 +572,12 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
       continue;
     }
     const { def, forcedMode } = found;
+    if (def.extendedOnly && !options.extended) {
+      err(line, op.column, op.name.length,
+        `Den Befehl ‚${op.name}‘ gibt es nur im erweiterten Modus.`,
+        'Schalte „Erweiterter Modus“ ein, um Stackbefehle zu benutzen.');
+      continue;
+    }
     const needsAddress = !def.modes.includes('none');
 
     // ----- operand present / missing? -----
@@ -604,16 +601,16 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
         if (operand.syntax !== 'plain') {
           err(line, operand.column, operand.length,
             `‚${op.name}‘ erwartet nur eine Zahl, ohne ‚$‘, ‚@‘ oder Klammern.`,
-            `Schreibe z. B. ‚${op.name} 5‘. ‚${def.mnemonic} ${SYNTAX_EXAMPLE[operand.syntax]}‘ wäre die Form ohne ‚I‘.`);
+            def.immediateMnemonic === def.mnemonic
+              ? `Schreibe z. B. ‚${op.name} 5‘.`
+              : `Schreibe z. B. ‚${op.name} 5‘. ‚${def.mnemonic} ${SYNTAX_EXAMPLE[operand.syntax]}‘ wäre die Form ohne ‚I‘.`);
           continue;
         }
         mode = forcedMode;
-      } else if (operand.syntax === 'offset' || operand.syntax === 'offsetIndirect' || operand.syntax === 'immediateOffset') {
+      } else if (!options.extended && (operand.syntax === 'offset' || operand.syntax === 'offsetIndirect' || operand.syntax === 'immediateOffset')) {
         err(line, operand.column, operand.length,
-          options.extended
-            ? `Die Adressierung ‚${SYNTAX_EXAMPLE[operand.syntax]}‘ wird noch nicht unterstützt.`
-            : `Die Adressierung ‚${SYNTAX_EXAMPLE[operand.syntax]}‘ gibt es nur im erweiterten Modus.`,
-          options.extended ? undefined : 'Schalte „Erweiterter Modus“ ein, um den Stackpointer zu benutzen.');
+          `Die Adressierung ‚${SYNTAX_EXAMPLE[operand.syntax]}‘ gibt es nur im erweiterten Modus.`,
+          'Schalte „Erweiterter Modus“ ein, um den Stackpointer zu benutzen.');
         continue;
       } else {
         mode = operand.syntax === 'plain' ? 'direct' : operand.syntax;
@@ -630,7 +627,8 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
           `‚${op.name}‘ kann nicht mit ‚${SYNTAX_EXAMPLE[operand.syntax]}‘ benutzt werden.`, hint);
         continue;
       }
-      word2 = resolve(item, operand, mode === 'immediate');
+      // Negative numbers are allowed for immediate operands and SP offsets (e.g. "LOAD -1(SP)").
+      word2 = resolve(item, operand, mode !== 'direct' && mode !== 'indirect');
     }
 
     memory[item.address] = encodeWord1(def, mode);

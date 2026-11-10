@@ -2,7 +2,7 @@
 
 Ein moderner, im Browser laufender CPU-Simulator nach dem Vorbild der **Minimaschine 4.0** (A. Wiedemann): eine 16-Bit-Akkumulatormaschine für den Informatikunterricht (LehrplanPLUS Bayern, Jgst. 12/13). Eigenständige Neuimplementierung – nur das dokumentierte Verhalten wird nachgebildet.
 
-**Stand:** Meilenstein M4 – Grund-Oberfläche plus Mikroschritte: SVG-Schaubild (Rechenwerk, Steuerwerk, Busse, Speicher) mit animiertem Datenfluss und Erklärtext zu Holen – Dekodieren – Ausführen. Es fehlen noch der erweiterte Modus (M5) und Speichern/Teilen/Offline (M6).
+**Stand:** Meilenstein M5 – vollständiger Befehlssatz inkl. erweitertem Modus (Stackpointer, `JSR`/`RTS`/`PUSH`/`POP`/`RSV`/`REL`, Adressierung relativ zum SP), Oberfläche mit Mikroschritt-Schaubild. Es fehlen noch Speichern/Teilen/Offline (M6) und Feinschliff/Deployment (M7).
 
 ## Voraussetzungen
 

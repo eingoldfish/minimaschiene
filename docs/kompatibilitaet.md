@@ -8,14 +8,14 @@ Status: **offen** = noch nicht geklärt · **Annahme** = so umgesetzt, aber nich
 
 | # | Thema | Status | Annahme / Notiz |
 |---|---|---|---|
-| 1 | Numerische Opcodes und Kodierung der Adressierungsart in Wort 1 | geklärt für den Standardmodus (Test 1 + 3a) | Siehe Abschnitt „Opcode-Tabelle“. Offen sind noch die Codes der SP-Adressierungsarten und der Stackbefehle (`JSR`, `RTS`, `PUSH`, `POP`, `RSV`, `REL`) → Test 3b im erweiterten Modus. |
+| 1 | Numerische Opcodes und Kodierung der Adressierungsart in Wort 1 | geklärt (Test 1, 3a, 3b) | Siehe Abschnitt „Opcode-Tabelle“. Erweiterter Modus gemessen: `JSR` = 5, `RTS` = 6, `PUSH` = 25, `POP` = 26; Adressierungsarten `adr(SP)` = 4, `@adr(SP)` = 5, `$adr(SP)` = 6 (z. B. `LOAD 2(SP)` = 1044, `STORE 2(SP)` = 1045, `JSR 8` = 261). `RSV`/`REL` gibt es im Original nicht (Punkt 22) und haben bei uns die freien Codes 27/28, als Immediate (Art 2) kodiert. |
 | 2 | C-Flag bei `SUB`/`SUBI`/`CMP`/`CMPI` (Carry oder Borrow?) | geklärt (Test 1) | **Borrow:** C = 1 genau dann, wenn A < Operand (vorzeichenlos). 5−3 → C=0, 3−5 → C=1, 7−7 → C=0, 0−1 → C=1, 0xFFFF−1 → C=0, −32768−1 → C=0, V=1. `SUB` mit Adresse verhält sich wie `SUBI`. |
 | 3 | V/C-Flag bei `MUL`, `DIV`, `MOD`, `MULH`, Shifts, Logikbefehlen | geklärt (Test 4 + 5) | Siehe Abschnitt „Flags der Rechen-, Logik- und Schiebebefehle“. |
 | 4 | `CMP`: Manual sagt „setzt Null- und Negativflag“, `JLO`/`JHI` nach Vergleich nutzen aber C | geklärt (Test 1 + 6) | `CMP`/`CMPI` setzen Z, N, V und C exakt wie `SUB`, der Akku bleibt unverändert. `JLO` springt nach `3 CMP 5`. `-32768 CMPI 1` → V=1. |
 | 4a | Flags bei Ladebefehlen | geklärt (Test 1) | `LOAD`/`LOADI`/`LOADC` setzen Z und N nach dem geladenen Wert und **löschen V und C**. `STORE` und Sprünge lassen die Flags unverändert. |
 | 5 | Division durch 0 | geklärt (Test 2) – Abweichung geplant | **Original:** `DIV`/`DIVI` (auch mit negativem Dividenden), `MODI`, `DIVUI` und `MODUI` durch 0 brechen ab. Es erscheint ein Browser-Pop-up „Division durch 0“, und Akku, Flags usw. werden zurückgesetzt. **Eigene Lösung (freigegeben, muss nicht dem Original entsprechen):** siehe „Bewusste Neuerungen“. |
 | 5a | `DIV`/`MOD` mit negativen Operanden | geklärt (Test 6) | Wie Java/JavaScript: **Quotient Richtung 0 gerundet**, **Rest hat das Vorzeichen des Dividenden**. `-7 DIVI 2` → −3, `-7 MODI 2` → −1, `7 MODI -2` → 1. |
-| 6 | Startwert des Stackpointers (SP) | offen | Vorläufig 0 in `createInitialState()`. |
+| 6 | Startwert des Stackpointers (SP) | geklärt (Test 3b) | Nach „Zurücksetzen“ ist **SP = 65534**; nach `LOADI 7`, `PUSH` ist SP = 65533 (die 7 steht nicht in Zelle 0). Bei uns setzen auch der Befehl `RESET` und das Einschalten SP auf 65534. |
 | 7 | Verhalten von `RESET` als Befehl im Programm | geklärt (Test 4 + 6) – Abweichung geplant | **Original, Befehl `RESET`:** setzt Akku, Programmzähler, Befehlsregister und Flags zurück, der Speicher (inkl. Programm) ist danach 0, die Maschine ist angehalten (nur „Zurücksetzen“ aktiv). **Original, Knopf „Zurücksetzen“:** setzt Akku, PC, Befehlsregister und Flags zurück, der **Speicher bleibt erhalten** (Screenshot Test 6). Befehl und Knopf verhalten sich also verschieden. **Eigene Lösung:** siehe „Bewusste Neuerungen“. |
 | 8 | Feinaufteilung der Mikroschritte (Holen – Dekodieren – Ausführen) | Annahme (M4) | Eigene Aufteilung, zentral in `src/core/microcode.ts`: **Holen 1/2** (PC → Adressbus, Befehlswort → Befehlsregister, PC+1), **Holen 2/2** (Adressteil → Befehlsregister, PC+1), **Dekodieren**, dann **Ausführen** in 1–3 Schritten: [Adresse nachschlagen bei indirekt] [Operand holen bzw. Zahl aus dem Adressteil] Rechnen/Laden/Vergleichen bzw. Schreiben (STORE) bzw. Sprung prüfen. Beispiele: `LOAD 20` = 5, `LOAD (20)` = 6, `STORE 20` = 4, `JMP x` = 4 Mikroschritte. Im Original mit der Detaildarstellung prüfen und ggf. anpassen. |
 | 9 | Dateiendung für Assemblerdateien | offen | Vermutlich `.mia` – Bestätigung ausstehend. |
@@ -27,6 +27,11 @@ Status: **offen** = noch nicht geklärt · **Annahme** = so umgesetzt, aber nich
 | 15 | Groß-/Kleinschreibung bei Marken | Annahme (M2) | Marken unterscheiden Groß- und Kleinschreibung (`Ende` ≠ `ende`), Befehle nicht. Bei einem Treffer, der sich nur in der Schreibweise unterscheidet, gibt der Assembler einen Hinweis. Im Original prüfen. |
 | 16 | Befehlsnamen als Marken | Annahme (M2) | Nicht erlaubt (z. B. `load:`, `word:`, `sp:`), auch keine Namen der Stackbefehle. |
 | 17 | Negative Zahlen und Marken als Zahlenwert | Annahme (M2) | Negative Zahlen (−32768 … −1) gibt es nur bei Immediate (`LOADI -7`, `ADD $-1`) und `WORD`. Eine negative Adresse (`LOAD -1`) ist ein Fehler. `LOADI Marke` und `WORD Marke` sind erlaubt und liefern die Adresse der Marke. |
+| 18 | Reihenfolge bei `PUSH`/`POP`/`JSR`/`RTS` | `PUSH` geklärt (Test 3b), Rest Annahme | `PUSH` verringert erst SP und schreibt dann nach Speicher[SP]: nach `LOADI 7`, `PUSH`, `LOAD 0(SP)` steht 7 im Akku, die 7 liegt also in Zelle 65533. Entsprechend (Annahme, passend zum Manual): `JSR` erst SP − 1, dann Rücksprungadresse ablegen; `POP` und `RTS` erst lesen, dann SP + 1. |
+| 19 | Flags der Stackbefehle | `POP` geklärt (Test 3b), Rest Annahme | `POP` setzt Z/N wie `LOAD` und löscht V und C: nach `LOADI -5`, `PUSH`, `LOADI 1`, `CMPI 2` (N=1, C=1) liefert `POP` Akku = −5 mit N=1, Z=V=C=0. `PUSH`, `JSR`, `RTS`, `RSV`, `REL` lassen die Flags unverändert (Annahme). |
+| 20 | Stackbefehle ohne erweiterten Modus | Annahme (M5) | Der Assembler lehnt Stackbefehle und SP-Adressierung ohne „Erweiterter Modus“ ab. Die CPU führt sie aber aus, falls sie (z. B. durch Speicher-Editieren) im Speicher stehen. |
+| 21 | Negative Offsets bei SP-Adressierung | Annahme (M5) | `LOAD -1(SP)` ist erlaubt (Adresse = SP − 1, mit Überlauf modulo 65536). |
+| 22 | `RSV` und `REL` im Original | beobachtet (Test 3b) – Abweichung | `JSR 8`, `RTS`, `PUSH`, `POP`, `LOAD 2(SP)`, `LOAD @2(SP)`, `LOAD $2(SP)` und `STORE 2(SP)` lassen sich im Original assemblieren, `RSV 3` und `REL 3` nicht – obwohl beide im Manual (3.3 EBNF und 3.4 Befehlsübersicht) stehen. Bei uns bleiben `RSV` und `REL` erhalten, siehe „Bewusste Neuerungen“. In der Ansicht „Opcodes anzeigen“ zeigt das Original alle drei SP-Arten nur als `LOAD 2` (ohne `@`, `$` oder `(SP)`). |
 
 ## Opcode-Tabelle (am Original ermittelt)
 
@@ -38,7 +43,7 @@ Status: **offen** = noch nicht geklärt · **Annahme** = so umgesetzt, aber nich
 | 1 | direkt `adr` (auch alle Sprünge, `STORE`) | `LOAD 11` = 0x0114 |
 | 2 | immediate `$adr` | `LOAD $11` = `LOADI 11` = 0x0214 |
 | 3 | indirekt `(adr)` | `LOAD (11)` = 0x0314 |
-| ? | `adr(SP)`, `@adr(SP)`, `$adr(SP)` | offen (Test 3b) |
+| 4 / 5 / 6 | `adr(SP)`, `@adr(SP)`, `$adr(SP)` (nur erweiterter Modus) | `LOAD 2(SP)` = 0x0414, `LOAD @2(SP)` = 0x0514, `LOAD $2(SP)` = 0x0614 |
 
 Die `…I`-Befehle sind keine eigenen Opcodes, sondern Art 2 des Grundbefehls (`ADDI 11` = `ADD $11` = 0x020A).
 
@@ -58,7 +63,7 @@ Die `…I`-Befehle sind keine eigenen Opcodes, sondern Art 2 des Grundbefehls (`
 | 19 (0x13) | `MULHU` | | | 56 (0x38) | `NOT` |
 | | | | | 99 (0x63) | `HALT` |
 
-Lücken (z. B. 2–9, 23–29, 39, 44–49) gehören vermutlich zu den Stackbefehlen. Prüfen mit Test 3b.
+Erweiterter Modus (Test 3b): 5 (0x05) = `JSR`, 6 (0x06) = `RTS`, 25 (0x19) = `PUSH`, 26 (0x1A) = `POP`. Eigene Codes ohne Gegenstück im Original: 27 (0x1B) = `RSV`, 28 (0x1C) = `REL`.
 
 **Ansicht „Opcodes anzeigen“ im Original:**
 - Die Ansicht dekodiert den Speicher immer paarweise ab Adresse 0 (gerade Adresse = Wort 1, ungerade = Adressteil), egal ob dort Befehle oder Daten stehen.
@@ -94,6 +99,7 @@ Vorbelegung der Flags mit `CMPI` (C=1/N=1 bzw. V=1), dann der Befehl.
 
 ## Bewusste Neuerungen gegenüber dem Original
 
+- **`RSV n` / `REL n`** (M5, Punkt 22): `RSV 3` und `REL 3` ließen sich im Original nicht assemblieren; bei uns gibt es beide Befehle wie im Manual beschrieben (SP − n bzw. SP + n). Sie reservieren bzw. geben Platz für lokale Variablen auf dem Stack frei. Programme, die sie benutzen, laufen deshalb evtl. nicht im Original.
 - **Mikroschritte mit Erklärung** (M4): Zu jedem Mikroschritt erscheint ein Erklärtext mit den konkreten Werten; Werte wandern animiert über die Busse (abschaltbar, bei `prefers-reduced-motion` aus). Auch Mikroschritte lassen sich mit „Schritt zurück“ einzeln zurücknehmen; „Schritt“ führt einen angefangenen Befehl zu Ende.
 - **Abbruchschranke** (M3): Sie greift nur beim Tempo „Maximal“. Bei langsamem Tempo sieht man das Programm laufen und kann jederzeit „Pause“ drücken; eine Zeitgrenze würde dort längere, aber korrekte Programme abbrechen.
 - **Hervorhebung nach HALT** (M3): Der PC zeigt nach `HALT` hinter den Befehl (Punkt 13). Im Editor wird trotzdem die `HALT`-Zeile markiert, weil die nächste Zeile oft schon Daten sind.

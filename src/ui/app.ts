@@ -61,6 +61,8 @@ export class App {
   private theme: Theme = 'auto';
   private animations = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   private machineTab: 'diagram' | 'registers' = 'diagram';
+  /** Extended mode: stack pointer and stack instructions. */
+  private extended = false;
 
   // ----- run state -----
   /** The source was edited after the last successful assembling. */
@@ -77,6 +79,7 @@ export class App {
   private readonly btn: Record<'stepBack' | 'step' | 'micro' | 'run' | 'reset', HTMLButtonElement>;
   private readonly themeBtn: HTMLButtonElement;
   private readonly explanationEl: HTMLElement;
+  private readonly spButton: HTMLButtonElement;
   private readonly tabButtons: Record<'diagram' | 'registers', HTMLButtonElement>;
   private readonly tabPanes: Record<'diagram' | 'registers', HTMLElement>;
 
@@ -118,8 +121,9 @@ export class App {
           h('label', { class: 'check', title: 'Werte im Schaubild wandern sichtbar über die Busse' },
             h('input', { type: 'checkbox', checked: this.animations, onchange: (ev: Event) => { this.animations = (ev.target as HTMLInputElement).checked; } }),
             'Animationen'),
-          h('label', { class: 'check disabled', title: 'Stackpointer und Stackbefehle – folgt in einer späteren Version' },
-            h('input', { type: 'checkbox', disabled: true }), 'Erweiterter Modus'),
+          h('label', { class: 'check', title: 'Stackpointer (SP), Stackbefehle (JSR, RTS, PUSH, POP, RSV, REL) und Adressierung relativ zum SP' },
+            h('input', { type: 'checkbox', onchange: (ev: Event) => this.setExtended((ev.target as HTMLInputElement).checked) }),
+            'Erweiterter Modus'),
           button('Beamer', () => this.toggleBeamer(), { class: 'subtle', title: 'Große Schrift für die Projektion' }),
           this.themeBtn)),
       h('nav', { class: 'toolbar', 'aria-label': 'Programm ausführen' },
@@ -159,6 +163,9 @@ export class App {
       this.tabPanes.diagram, this.tabPanes.registers);
 
     // ----- memory panel -----
+    this.spButton = button('Zum SP', () => this.memory.scrollToAddress(this.session.state.sp, true),
+      { class: 'small', title: 'Zur Zelle springen, auf die der Stackpointer zeigt' });
+    this.spButton.hidden = true;
     this.memory = new MemoryView((address, value) => {
       this.session.writeMemory(address, value);
       this.setStatus(`Adresse ${address} geändert. („Schritt zurück“ ist danach erst wieder nach dem nächsten Schritt möglich.)`, 'info');
@@ -201,6 +208,7 @@ export class App {
       h('div', { class: 'mem-tools' },
         h('label', { class: 'check' }, followBox, 'dem PC folgen'),
         button('Zum PC', () => this.memory.scrollToAddress(this.session.state.pc, true), { class: 'small' }),
+        this.spButton,
         button('Zum Adressteil', () => this.memory.scrollToAddress(this.session.state.ir.address, true),
           { class: 'small', title: 'Zur Adresse aus dem Befehlsregister springen' }),
         h('label', { class: 'field' }, 'Gehe zu', gotoInput),
@@ -240,7 +248,7 @@ export class App {
   private assemble(keepMemory: boolean): void {
     this.stopRun();
     this.leaveMicroView();
-    const result = this.session.assemble(this.editor.getText(), { keepMemory });
+    const result = this.session.assemble(this.editor.getText(), { keepMemory, extended: this.extended });
     this.editor.setErrors(result.errors);
     this.showErrors(result.errors);
     if (result.ok) {
@@ -442,6 +450,21 @@ export class App {
   // View settings
   // ==================================================================
 
+  private setExtended(on: boolean): void {
+    this.extended = on;
+    this.diagram.setExtended(on);
+    this.spButton.hidden = !on;
+    if (this.session.program) {
+      this.programStale = true;
+      this.setStatus(on
+        ? `Erweiterter Modus an: Stackpointer, Stackbefehle und SP-Adressierung sind verfügbar. Bitte neu assemblieren (${KEYS.assemble}).`
+        : `Erweiterter Modus aus. Bitte neu assemblieren (${KEYS.assemble}).`, 'info');
+    } else {
+      this.setStatus(on ? 'Erweiterter Modus an: Stackpointer, Stackbefehle und SP-Adressierung sind verfügbar.' : 'Erweiterter Modus aus.', 'info');
+    }
+    this.render();
+  }
+
   private setMachineTab(tab: 'diagram' | 'registers'): void {
     this.machineTab = tab;
     for (const id of ['diagram', 'registers'] as const) {
@@ -529,12 +552,14 @@ export class App {
       currentLine,
       hasExecuted,
       labelAt: (a) => s.labelAt(a),
+      extended: this.extended,
     });
     this.diagram.update(st, this.lastEvent, { labelAt: (a) => s.labelAt(a) });
     this.renderExplanation();
     this.memory.update(st, {
       format: this.format,
       hexAddresses: this.hexAddresses,
+      sp: this.extended ? st.sp : null,
       labelAt: (a) => s.labelAt(a),
     });
     if (this.followPc) this.memory.scrollToAddress(st.pc);

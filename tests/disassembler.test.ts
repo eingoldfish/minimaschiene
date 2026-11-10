@@ -53,7 +53,7 @@ describe('round trip: disassemble → assemble gives the same words', () => {
 
   it.each(cases)('word1 0x%s', (w1, w2) => {
     const text = disassemble(w1, w2).text;
-    const r = assemble(text);
+    const r = assemble(text, { extended: true });
     expect(r.errors).toEqual([]);
     expect([r.memory[0], r.memory[1]]).toEqual([w1, w2]);
   });

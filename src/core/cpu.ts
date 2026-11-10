@@ -15,7 +15,7 @@
 
 import { alu, ALU_INSTRUCTIONS, JUMP_CONDITIONS, type Flags } from './alu';
 import { MEMORY_SIZE, toUnsigned16, WORD_MASK } from './format';
-import { decodeWord1, type AddressingMode, type InstructionDef } from './isa';
+import { decodeWord1, SP_START, type AddressingMode, type InstructionDef } from './isa';
 import { planInstruction, type MicroContext, type MicroEnv, type MicroStepEvent } from './microcode';
 
 export type { Flags } from './alu';
@@ -83,12 +83,13 @@ export interface RunResult {
 
 const CLEARED_FLAGS: Readonly<Flags> = { z: false, n: false, v: false, c: false };
 
+
 /** Creates the state of a freshly powered-on machine (all zero). */
 export function createInitialState(): CpuState {
   return {
     a: 0,
     pc: 0,
-    sp: 0, // TODO(M5): start value of SP is still open, see docs/kompatibilitaet.md
+    sp: SP_START,
     ir: { opcode: 0, mode: 'none', address: 0 },
     flags: { ...CLEARED_FLAGS },
     memory: new Uint16Array(MEMORY_SIZE),
@@ -137,6 +138,7 @@ export class Cpu {
     s.flags = { ...CLEARED_FLAGS };
     s.ir = { opcode: 0, mode: 'none', address: 0 };
     s.halted = 'none';
+    s.sp = SP_START;
     s.lastWrite = null;
     s.micro = null;
   }
@@ -305,9 +307,14 @@ export class Cpu {
         return this.read(address);
       case 'indirect':
         return this.read(this.read(address));
-      default:
-        // 'none' and the SP modes (M5) never reach this point yet.
-        throw new Error(`addressing mode '${mode}' not supported yet`);
+      case 'offset':
+        return this.read(address + this.state.sp);
+      case 'offsetIndirect':
+        return this.read(this.read(address + this.state.sp));
+      case 'immediateOffset':
+        return (address + this.state.sp) & WORD_MASK;
+      case 'none':
+        throw new Error('instruction without address has no operand');
     }
   }
 
@@ -318,6 +325,10 @@ export class Cpu {
         return address;
       case 'indirect':
         return this.read(address);
+      case 'offset':
+        return (address + this.state.sp) & WORD_MASK;
+      case 'offsetIndirect':
+        return this.read(address + this.state.sp);
       default:
         throw new Error(`addressing mode '${mode}' not supported for writing`);
     }
@@ -376,6 +387,34 @@ export class Cpu {
         // button, but the machine halts. Memory is kept.
         this.reset();
         s.halted = 'reset';
+        return;
+
+      // ----- extended mode: stack (grows downwards, SP points to the top element) -----
+      case 'JSR':
+        s.sp = (s.sp - 1) & WORD_MASK;
+        this.write(s.sp, s.pc); // PC already points to the next instruction
+        s.pc = address;
+        return;
+      case 'RTS':
+        s.pc = this.read(s.sp);
+        s.sp = (s.sp + 1) & WORD_MASK;
+        return;
+      case 'PUSH':
+        s.sp = (s.sp - 1) & WORD_MASK;
+        this.write(s.sp, s.a);
+        return;
+      case 'POP': {
+        const res = alu('PASS', s.a, this.read(s.sp))!;
+        s.a = res.result;
+        s.flags = res.flags;
+        s.sp = (s.sp + 1) & WORD_MASK;
+        return;
+      }
+      case 'RSV':
+        s.sp = (s.sp - address) & WORD_MASK;
+        return;
+      case 'REL':
+        s.sp = (s.sp + address) & WORD_MASK;
         return;
       default:
         throw new Error(`instruction ${name} not implemented`);

@@ -7,6 +7,7 @@ import { assemble, Cpu, createInitialState, encodeWord1, INSTRUCTIONS, MEMORY_SI
 const DATA_ADDR = 100; // operand cell
 const POINTER_ADDR = 101; // contains DATA_ADDR (for indirect addressing)
 const JUMP_TARGET = 50;
+const SP = 90; // stack pointer in the tests; mem[SP] is the top of the stack
 
 const A_VALUES = [0, 1, 7, 0x7fff, 0x8000, 0xffff];
 const B_VALUES = [0, 1, 3, 17, 0x8000, 0xffff];
@@ -25,9 +26,10 @@ function setup(word1: number, word2: number, a: number, flags: Flags, data: numb
   mem[11] = word2;
   mem[DATA_ADDR] = data;
   mem[POINTER_ADDR] = DATA_ADDR;
+  mem[SP] = data; // top of stack (POP / RTS)
   const cpu = new Cpu();
   // One restore() instead of loadMemory() + snapshot() saves two 128-KB copies per case.
-  cpu.restore({ ...createInitialState(), memory: mem, a, pc: 10, flags: { ...flags }, lastWrite: 7 });
+  cpu.restore({ ...createInitialState(), memory: mem, a, pc: 10, sp: SP, flags: { ...flags }, lastWrite: 7 });
   return cpu;
 }
 
@@ -65,7 +67,9 @@ function cases(): Array<{ label: string; word1: number; word2s: number[] }> {
   const result: Array<{ label: string; word1: number; word2s: number[] }> = [];
   for (const def of INSTRUCTIONS) {
     for (const mode of def.modes) {
-      const word2s = mode === 'immediate' ? B_VALUES
+      const word2s = mode === 'immediate' || mode === 'immediateOffset' ? B_VALUES
+        : mode === 'offset' ? [DATA_ADDR - SP]
+          : mode === 'offsetIndirect' ? [POINTER_ADDR - SP]
         : mode === 'direct' ? [def.group === 'jump' ? JUMP_TARGET : DATA_ADDR]
           : mode === 'indirect' ? [POINTER_ADDR] : [0];
       result.push({ label: `${def.mnemonic} ${mode}`, word1: encodeWord1(def, mode), word2s });
@@ -81,7 +85,9 @@ describe('micro steps give the same result as step()', () => {
     for (const word2 of word2s) {
       for (const a of A_VALUES) {
         for (const flags of FLAG_SETS) {
-          for (const data of word1 >> 8 === 1 || word1 >> 8 === 3 ? B_VALUES : [3]) {
+          // Memory contents only matter if the instruction reads memory or the stack.
+          const readsMemory = [1, 3, 4, 5].includes(word1 >> 8) || [6, 26].includes(word1 & 0xff);
+          for (const data of readsMemory ? B_VALUES : [3]) {
             const expected = setup(word1, word2, a, flags, data);
             expected.step();
             const actual = setup(word1, word2, a, flags, data);
