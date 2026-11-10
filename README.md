@@ -2,7 +2,7 @@
 
 **Ein Modellrechner zum Anfassen – direkt im Browser.**
 
-👉 **Loslegen:** https://eingoidfisch.github.io/minimaschiene/
+👉 **Loslegen:** https://eingoldfish.github.io/minimaschiene/
 
 Die Minimaschine ist ein stark vereinfachter Computer, an dem man sieht, was in einem echten Prozessor passiert: Wie ein Befehl aus dem Speicher geholt, entschlüsselt und ausgeführt wird, wie der Akkumulator rechnet und wie Flags und Sprünge Schleifen und Verzweigungen möglich machen. Man schreibt kleine Programme in Assembler, übersetzt sie und lässt sie Schritt für Schritt – oder sogar Mikroschritt für Mikroschritt – laufen.
 
