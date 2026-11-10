@@ -4,26 +4,31 @@
    font size. All colours are CSS variables (light/dark mode).
    ===================================================================== */
 
-/* ---------- Colour tokens (light) ---------- */
+/* ---------- Colour tokens (light) ----------
+   Palette "Dusty Teal": #E0EFED (page background), #BFDBD8 (lines, soft
+   highlights), #9AC2BE (hover), #749B96 (buttons, selected and active parts).
+   Text on #749B96 is dark: white would only reach a contrast of 3:1.
+   Status, syntax and bus colours keep their meaning (red = error …). */
 :root {
   color-scheme: light;
-  --bg: #f4f5f7;
+  --bg: #e0efed;
   --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --border: #d3d8df;
-  --text: #1b1f24;
-  --text-muted: #5b6470;
-  --accent: #1f5fd1;
-  --accent-text: #ffffff;
-  --accent-soft: #e3ecfc;
+  --surface-2: #e0efed;
+  --border: #bfdbd8;
+  --text: #1c2b29;
+  --text-muted: #4a635f;
+  --accent: #749b96;
+  --accent-text: #0f2422;
+  --accent-soft: #bfdbd8;
+  --accent-hover: #9ac2be;
   --danger: #b42318;
   --danger-soft: #fdecea;
   --success: #1a7f37;
   --success-soft: #e6f4ea;
   --warning: #9a6700;
   --warning-soft: #fff4d6;
-  --selection: #c9dafc;
-  --active-line: #f6f8fb;
+  --selection: #bfdbd8;
+  --active-line: #f1f8f7;
   --exec-bg: #fff1b8;
   --exec-border: #e0b400;
   --pc-bg: #fff1b8;
@@ -40,6 +45,7 @@
   --bus-control: #1a7f37;
   --token-bg: #1b1f24;
   --token-text: #ffffff;
+  --alu-value: #b0189f;
   --radius: 8px;
   --gap: 1rem;
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -48,27 +54,29 @@
   font-size: 16px;
 }
 
-/* ---------- Dark ---------- */
+/* ---------- Dark: the same teal hues on a dark teal-grey background ---------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #0f1216;
-    --surface: #171b21;
-    --surface-2: #1e232b;
-    --border: #2f3640;
-    --text: #e6e9ee;
-    --text-muted: #9aa4b1;
-    --accent: #5b9bff;
-    --accent-text: #0b0e12;
-    --accent-soft: #1b2b45;
+    --bg: #111a19;
+    --surface: #182322;
+    --surface-2: #1f2d2b;
+    --border: #344a47;
+    --text: #e0efed;
+    --text-muted: #9db5b2;
+    --accent: #9ac2be;
+    --accent-text: #0f2422;
+    --accent-soft: #2a403d;
+  --accent-hover: #bfdbd8;
+    --accent-hover: #bfdbd8;
     --danger: #ff7b72;
     --danger-soft: #3b1715;
     --success: #56d364;
     --success-soft: #12301a;
     --warning: #e3b341;
     --warning-soft: #3a2e0c;
-    --selection: #26416b;
-    --active-line: #1b2027;
+    --selection: #36524e;
+    --active-line: #1c2927;
     --exec-bg: #4a3d0a;
     --exec-border: #c9a227;
     --pc-bg: #4a3d0a;
@@ -85,27 +93,28 @@
     --bus-control: #56d364;
     --token-bg: #f0f3f6;
     --token-text: #0b0e12;
+    --alu-value: #e05cf0;
   }
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0f1216;
-  --surface: #171b21;
-  --surface-2: #1e232b;
-  --border: #2f3640;
-  --text: #e6e9ee;
-  --text-muted: #9aa4b1;
-  --accent: #5b9bff;
-  --accent-text: #0b0e12;
-  --accent-soft: #1b2b45;
+  --bg: #111a19;
+  --surface: #182322;
+  --surface-2: #1f2d2b;
+  --border: #344a47;
+  --text: #e0efed;
+  --text-muted: #9db5b2;
+  --accent: #9ac2be;
+  --accent-text: #0f2422;
+  --accent-soft: #2a403d;
   --danger: #ff7b72;
   --danger-soft: #3b1715;
   --success: #56d364;
   --success-soft: #12301a;
   --warning: #e3b341;
   --warning-soft: #3a2e0c;
-  --selection: #26416b;
-  --active-line: #1b2027;
+  --selection: #36524e;
+  --active-line: #1c2927;
   --exec-bg: #4a3d0a;
   --exec-border: #c9a227;
   --pc-bg: #4a3d0a;
@@ -122,11 +131,20 @@
   --bus-control: #56d364;
   --token-bg: #f0f3f6;
   --token-text: #0b0e12;
+  --alu-value: #e05cf0;
 }
 
 /* Beamer: everything bigger */
 :root.beamer {
   font-size: 21px;
+}
+
+/* Hidden text field used as a fallback for copying to the clipboard */
+.copy-buffer {
+  position: fixed;
+  top: 0;
+  left: -9999px;
+  opacity: 0;
 }
 
 /* ---------- Base ---------- */
@@ -200,8 +218,8 @@ button.primary kbd {
 }
 
 button.primary:hover:not(:disabled) {
-  background: var(--accent);
-  filter: brightness(1.1);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 button.is-running {
@@ -325,12 +343,111 @@ input[type='number'],
 /* ---------- Main grid: editor left, machine right, memory below ---------- */
 .app-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* --split (set by the app) = width of the program panel; the bar in between can be dragged */
+  grid-template-columns: minmax(0, calc(var(--split, 50%) - 0.5rem)) 1rem minmax(0, 1fr);
   grid-template-areas:
-    'editor machine'
-    'memory memory';
-  gap: var(--gap);
+    'editor split machine'
+    'memory memory memory';
+  gap: var(--gap) 0;
   padding: var(--gap);
+}
+
+.splitter {
+  grid-area: split;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+/* the visible grip line */
+.splitter::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 3rem;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.splitter:hover::after,
+.splitter:focus-visible::after,
+.splitter.dragging::after {
+  height: 100%;
+  background: var(--accent);
+}
+
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ---------- Maximized panel (wide screens): the header stays, the panel fills the rest ---------- */
+:root.max-editor #app,
+:root.max-machine #app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+:root.max-editor .app-main,
+:root.max-machine .app-main {
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+:root.max-editor .app-main {
+  grid-template-areas: 'editor';
+}
+
+:root.max-machine .app-main {
+  grid-template-areas: 'machine';
+}
+
+:root.max-editor .panel-machine,
+:root.max-editor .panel-memory,
+:root.max-machine .panel-editor,
+:root.max-machine .panel-memory,
+:root.max-editor .splitter,
+:root.max-machine .splitter {
+  display: none;
+}
+
+:root.max-editor .panel-editor,
+:root.max-machine .panel-machine {
+  min-height: 0;
+  overflow: auto;
+}
+
+/* editor: more lines and columns, same font size */
+:root.max-editor .editor-host {
+  flex: 1;
+  height: auto;
+  min-height: 10rem;
+}
+
+/* machine: the diagram grows with the panel */
+:root.max-machine .tab-pane:not([hidden]) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+:root.max-machine .diagram {
+  flex: 1;
+  min-height: 12rem;
+  height: 100%;
+}
+
+:root.max-machine .explanation {
+  flex: none;
 }
 
 .panel {
@@ -375,12 +492,79 @@ input[type='number'],
       'editor'
       'machine'
       'memory';
+    gap: var(--gap);
+  }
+
+  .splitter {
+    display: none;
+  }
+
+  /* One below the other: a fixed, comfortable height */
+  .editor-host {
+    flex: none;
+    height: 26rem;
+    min-height: 0;
+  }
+}
+
+/* ---------- Phones: the maximized editor covers the whole screen ---------- */
+@media (max-width: 600px) {
+  /* the enlarge button sits next to the heading, the assemble buttons get their own row */
+  .panel-editor .head-actions {
+    display: contents;
+  }
+
+  .panel-editor .panel-head > h2 {
+    flex: 1;
+  }
+
+  .panel-editor .max-btn {
+    order: 1;
+    min-height: calc(1.75rem + 2px);
+  }
+
+  .panel-editor .head-actions > .btn-group {
+    order: 2;
+    flex-basis: 100%;
+  }
+
+  /* the machine is easy to scroll to on a phone; only the editor gets a full-screen mode */
+  .panel-machine .max-btn {
+    display: none;
+  }
+
+  :root.max-editor body {
+    overflow: hidden;
+  }
+
+  :root.max-editor .panel-editor {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    border: none;
+    border-radius: 0;
+    padding: 0.4rem;
+    gap: 0.4rem;
+  }
+
+  /* only the input field and the button to make it small again */
+  :root.max-editor .panel-editor > :not(.panel-head, .editor-host),
+  :root.max-editor .panel-editor .panel-head > h2,
+  :root.max-editor .panel-editor .head-actions > :not(.max-btn) {
+    display: none;
+  }
+
+  :root.max-editor .panel-editor .panel-head {
+    justify-content: flex-end;
   }
 }
 
 /* ---------- Editor ---------- */
 .editor-host {
-  height: 26rem;
+  /* Side by side: the editor takes the height of the machine panel (at least 18rem),
+     so neither panel has empty space at the bottom. */
+  flex: 1 1 0;
+  min-height: 18rem;
   border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
@@ -405,7 +589,8 @@ input[type='number'],
 }
 
 .cm-help {
-  max-width: 24rem;
+  /* The tooltip lives in <body>, so it may be wider than the editor. */
+  max-width: min(30rem, calc(100vw - 2rem));
   padding: 0.5rem 0.7rem;
   font-family: var(--font-ui);
   font-size: 0.9rem;
@@ -701,6 +886,197 @@ input[type='number'],
   }
 }
 
+/* Buttons that only show an icon */
+.icon {
+  width: 1.05em;
+  height: 1.05em;
+  vertical-align: -0.15em;
+}
+
+/* Icon buttons take the height of the text buttons next to them */
+button.icon-btn {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
+}
+
+/* In the memory tools the row also holds taller input fields: match the small buttons instead */
+.mem-tools button.icon-btn {
+  align-self: center;
+  height: calc(1.75rem + 2px);
+}
+
+/* ---------- Light/dark switch (knob left + dark track = dark mode) ---------- */
+button.theme-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.25rem;
+  border: none;
+  background: transparent;
+}
+
+.switch-track {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 3rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  background: #e8eeed;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: background-color 0.2s;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 0.2rem;
+  left: 1.6rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  background: #2b3634;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: left 0.2s, background-color 0.2s;
+}
+
+.theme-switch[aria-checked='true'] .switch-track {
+  background: #1c2524;
+  box-shadow: inset 0 0 0 1px #3b4b49;
+}
+
+.theme-switch[aria-checked='true'] .switch-knob {
+  left: 0.2rem;
+  background: #f4f7f6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch-track,
+  .switch-knob {
+    transition: none;
+  }
+}
+
+/* ---------- Drop-down menus (see menu.ts) ---------- */
+.menu {
+  position: relative;
+  display: inline-block;
+}
+
+.menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.menu.open > .menu-toggle {
+  background: var(--surface-2);
+}
+
+.menu-caret {
+  font-size: 0.75em;
+}
+
+.menu-pop {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  z-index: 40;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.25rem;
+  min-width: 12rem;
+  padding: 0.4rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.menu.open > .menu-pop {
+  display: flex;
+}
+
+.menu-left {
+  left: 0;
+}
+
+.menu-right {
+  right: 0;
+}
+
+.menu.open > .menu-pop > button {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-color: transparent;
+  background: transparent;
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.95rem;
+}
+
+.menu.open > .menu-pop > button:hover {
+  background: var(--surface-2);
+}
+
+.menu.open > .menu-pop > .check {
+  padding: 0.3rem 0.6rem;
+}
+
+.menu.open > .menu-pop .segmented {
+  flex-direction: column;
+  border: none;
+}
+
+.menu-heading {
+  margin-top: 0.3rem;
+  padding: 0.3rem 0.6rem 0.1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.flag-icon {
+  width: 1.6em;
+  height: 1.05em;
+  vertical-align: middle;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+button.lang-btn {
+  padding: 0.25rem 0.4rem;
+  line-height: 1;
+}
+
+/* Phones: narrow gutters in the editor, so more of the code fits */
+@media (max-width: 600px) {
+  .cm-editor .cm-gutters {
+    font-size: 0.7em;
+  }
+
+  .cm-editor .cm-lineNumbers .cm-gutterElement {
+    min-width: 1.6em !important;
+    padding: 0 2px 0 1px !important;
+  }
+
+  .cm-editor .cm-breakpoint-gutter .cm-gutterElement {
+    width: 0.9em !important;
+  }
+
+  .cm-editor .cm-gutter-lint {
+    width: 0.9em;
+  }
+
+  .cm-editor .cm-gutter-lint .cm-gutterElement {
+    padding: 0;
+  }
+}
+
 /* Phones/tablets without keyboard: hide shortcut hints */
 @media (max-width: 600px), (pointer: coarse) {
   kbd {
@@ -833,9 +1209,26 @@ button.is-busy {
 
 .d-alu-op {
   font-family: var(--font-mono);
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   fill: var(--accent);
+}
+
+.d-alu-op.long {
+  font-size: 14px;
+}
+
+/* operands at the arms of the ALU and its result */
+.d-alu-in,
+.d-alu-out {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  fill: var(--alu-value);
+}
+
+.d-alu-out {
+  font-size: 17px;
 }
 
 .d-divider {
@@ -994,4 +1387,117 @@ button.is-busy {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 14rem;
+}
+
+/* ---------- Wide screens: "phone menus" are not drop-downs, their items stay in the row ---------- */
+@media (min-width: 601px) {
+  .menu.phone-menu,
+  .menu.phone-menu > .menu-pop {
+    display: contents;
+  }
+
+  .menu.phone-menu > .menu-toggle,
+  .phone-only {
+    display: none !important;
+  }
+}
+
+/* ---------- Phones: compact header, toolbar and panel heads ---------- */
+@media (max-width: 600px) {
+  .wide-only {
+    display: none !important;
+  }
+
+  /* title, options and flag in one row */
+  .title-row {
+    flex-wrap: nowrap;
+  }
+
+  .view-settings {
+    flex-wrap: nowrap;
+    gap: 0.2rem;
+  }
+
+  .app-header {
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .toolbar {
+    gap: 0.5rem;
+  }
+
+  /* run buttons in two rows: 3 + 2 */
+  .toolbar > .btn-group {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.35rem;
+    width: 100%;
+  }
+
+  .toolbar > .btn-group > button {
+    grid-column: span 2;
+    padding: 0.45rem 0.15rem;
+    font-size: 0.85rem;
+    letter-spacing: -0.01em;
+  }
+
+  .toolbar > .btn-group > button:nth-child(n + 4) {
+    grid-column: span 3;
+  }
+
+  /* speed and time limit in one row */
+  .run-settings {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    font-size: 0.9rem;
+  }
+
+  .run-settings .field {
+    gap: 0.3rem;
+    min-width: 0;
+  }
+
+  .run-settings select {
+    max-width: 8.5rem;
+  }
+
+  .run-settings .limit-input {
+    width: 3.2rem;
+  }
+
+  /* "Assemble" and "… and keep memory" in one row */
+  .panel-editor .head-actions > .btn-group {
+    flex-wrap: nowrap;
+  }
+
+  .panel-editor .head-actions > .btn-group > button {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.45rem 0.4rem;
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* memory: heading and format menu in one row, tools in one row */
+  .panel-memory .panel-head {
+    flex-wrap: nowrap;
+  }
+
+  .mem-tools {
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .mem-tools .goto-input {
+    width: 5.5rem;
+  }
+
+  .menu.phone-menu.open > .menu-pop > button {
+    justify-content: flex-start;
+  }
 }

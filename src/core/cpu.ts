@@ -13,9 +13,10 @@
  * Both lead to exactly the same state after an instruction.
  */
 
-import { alu, ALU_INSTRUCTIONS, JUMP_CONDITIONS, type Flags } from './alu';
+import { alu, ALU_INSTRUCTIONS, ALU_SYMBOLS, JUMP_CONDITIONS, type Flags } from './alu';
 import { MEMORY_SIZE, toUnsigned16, WORD_MASK } from './format';
 import { decodeWord1, SP_START, type AddressingMode, type InstructionDef } from './isa';
+import type { Language } from './lang';
 import { planInstruction, type MicroContext, type MicroEnv, type MicroStepEvent } from './microcode';
 
 export type { Flags } from './alu';
@@ -56,6 +57,17 @@ export interface CpuState {
   lastWrite: number | null;
   /** Set while an instruction is executed micro step by micro step, otherwise null. */
   micro: MicroContext | null;
+  /** The last calculation of the ALU (shown in the diagram), or null. */
+  lastAlu: AluActivity | null;
+}
+
+/** One calculation of the ALU: a (accumulator) op b (operand) = result. */
+export interface AluActivity {
+  a: number;
+  b: number;
+  /** Symbol of the operation, e.g. "+"; "→" = value passed through (LOAD), "cmp" = compare. */
+  op: string;
+  result: number;
 }
 
 /** Phase of the instruction cycle (Befehlszyklus). */
@@ -96,6 +108,7 @@ export function createInitialState(): CpuState {
     halted: 'none',
     lastWrite: null,
     micro: null,
+    lastAlu: null,
   };
 }
 
@@ -109,6 +122,7 @@ function copyRegisters(s: CpuRegisters): CpuRegisters {
     flags: { ...s.flags },
     halted: s.halted,
     lastWrite: s.lastWrite,
+    lastAlu: s.lastAlu ? { ...s.lastAlu } : null,
     micro: s.micro
       ? { index: s.micro.index, start: { ...s.micro.start, ir: { ...s.micro.start.ir }, flags: { ...s.micro.start.flags } } }
       : null,
@@ -119,6 +133,8 @@ export class Cpu {
   private state: CpuState = createInitialState();
   /** While a step is recorded for undo, memory writes are logged here. */
   private writeLog: Array<[number, number]> | null = null;
+  /** Language of the micro step explanations (does not influence the execution). */
+  language: Language = 'de';
   /** Memory access for micro steps (logs writes for undo). */
   private readonly env: MicroEnv = { write: (address, value) => this.write(address, value) };
 
@@ -141,6 +157,7 @@ export class Cpu {
     s.sp = SP_START;
     s.lastWrite = null;
     s.micro = null;
+    s.lastAlu = null;
   }
 
   /** Replaces the whole memory (used after assembling). */
@@ -213,7 +230,7 @@ export class Cpu {
       };
     }
     const context = s.micro;
-    const plan = planInstruction(context.start, s.memory);
+    const plan = planInstruction(context.start, s.memory, this.language);
     const index = context.index;
     const planned = plan[index];
     if (!planned) throw new Error('micro step index out of range');
@@ -350,6 +367,7 @@ export class Cpu {
     if (aluOp) {
       const b = mode === 'none' ? 0 : this.operand(mode, address);
       const res = alu(aluOp, s.a, b);
+      s.lastAlu = { a: s.a, b, op: ALU_SYMBOLS[aluOp], result: res ? res.result : s.a };
       if (!res) {
         s.halted = 'divisionByZero';
         return;
@@ -362,13 +380,17 @@ export class Cpu {
     switch (name) {
       case 'CMP': {
         // Like SUB, but the accumulator is not changed.
-        const res = alu('SUB', s.a, this.operand(mode, address));
-        if (res) s.flags = res.flags;
+        const b = this.operand(mode, address);
+        const res = alu('SUB', s.a, b)!;
+        s.lastAlu = { a: s.a, b, op: 'cmp', result: res.result };
+        s.flags = res.flags;
         return;
       }
       case 'LOADC': {
-        const res = alu('PASS', s.a, s.flags.c ? 1 : 0);
+        const c = s.flags.c ? 1 : 0;
+        const res = alu('PASS', s.a, c);
         if (res) {
+          s.lastAlu = { a: s.a, b: c, op: ALU_SYMBOLS.PASS, result: res.result };
           s.a = res.result;
           s.flags = res.flags;
         }
@@ -404,7 +426,9 @@ export class Cpu {
         this.write(s.sp, s.a);
         return;
       case 'POP': {
-        const res = alu('PASS', s.a, this.read(s.sp))!;
+        const value = this.read(s.sp);
+        const res = alu('PASS', s.a, value)!;
+        s.lastAlu = { a: s.a, b: value, op: ALU_SYMBOLS.PASS, result: res.result };
         s.a = res.result;
         s.flags = res.flags;
         s.sp = (s.sp + 1) & WORD_MASK;

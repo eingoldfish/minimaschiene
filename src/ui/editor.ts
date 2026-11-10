@@ -19,6 +19,7 @@ import {
   GutterMarker,
   highlightActiveLine,
   hoverTooltip,
+  tooltips,
   keymap,
   lineNumbers,
   type DecorationSet,
@@ -34,6 +35,7 @@ import {
   type AssembleError,
   type InstructionDef,
 } from '../core';
+import { getLanguage, t } from './i18n';
 
 // ====================================================================
 // Syntax highlighting
@@ -94,7 +96,7 @@ class BreakpointMarker extends GutterMarker {
   override toDOM(): Node {
     const dot = document.createElement('span');
     dot.className = 'cm-breakpoint-dot';
-    dot.title = 'Haltepunkt – Klick zum Entfernen';
+    dot.title = t().breakpointTitle;
     return dot;
   }
 }
@@ -179,14 +181,17 @@ const execLineField = StateField.define<DecorationSet>({
 function exampleFor(def: InstructionDef, name: string): string {
   if (def.modes.includes('none')) return name;
   if (name === def.immediateMnemonic) return `${name} 5`;
-  if (def.mnemonic === 'JSR') return `${name} Unterprogramm`;
-  if (def.group === 'jump') return `${name} Schleife`;
-  if (def.mnemonic === 'STORE') return `${name} Ergebnis`;
-  return `${name} Wert`;
+  const d = t();
+  if (def.mnemonic === 'JSR') return `${name} ${d.exampleLabelSub}`;
+  if (def.group === 'jump') return `${name} ${d.exampleLabelLoop}`;
+  if (def.mnemonic === 'STORE') return `${name} ${d.exampleLabelResult}`;
+  return `${name} ${d.exampleLabelValue}`;
 }
 
 function helpTooltip(word: string): HTMLElement | null {
   const upper = word.toUpperCase();
+  const d = t();
+  const lang = getLanguage();
   const box = document.createElement('div');
   box.className = 'cm-help';
   const add = (tag: string, text: string, cls?: string) => {
@@ -198,8 +203,8 @@ function helpTooltip(word: string): HTMLElement | null {
 
   if (upper === WORD_DIRECTIVE) {
     add('strong', 'WORD');
-    add('p', 'Reserviert eine Speicherzelle mit dem angegebenen Startwert (auch negativ oder eine Marke).');
-    add('code', 'Zähler: WORD 0');
+    add('p', d.helpWord);
+    add('code', d.helpWordExample);
     return box;
   }
   const found = lookupMnemonic(word);
@@ -207,14 +212,14 @@ function helpTooltip(word: string): HTMLElement | null {
   const { def } = found;
   const names = [def.mnemonic, ...def.aliases].join(' / ');
   const isOwnShortForm = def.immediateMnemonic === def.mnemonic; // RSV, REL
-  add('strong', found.forcedMode && !isOwnShortForm ? `${upper} (= ${def.mnemonic} $Zahl)` : names);
-  if (def.extendedOnly) add('p', 'Nur im erweiterten Modus.', 'cm-help-flags');
-  add('p', def.descriptionDe);
-  add('p', `Flags: ${def.flagsDe}`, 'cm-help-flags');
+  add('strong', found.forcedMode && !isOwnShortForm ? d.helpShortForm(upper, def.mnemonic) : names);
+  if (def.extendedOnly) add('p', d.helpExtendedOnly, 'cm-help-flags');
+  add('p', def.description[lang]);
+  add('p', d.helpFlags(def.flags[lang]), 'cm-help-flags');
   if (!found.forcedMode && def.immediateMnemonic && !isOwnShortForm) {
-    add('p', `Mit fester Zahl: ${def.immediateMnemonic} 5`, 'cm-help-flags');
+    add('p', d.helpImmediate(def.immediateMnemonic), 'cm-help-flags');
   }
-  add('code', `Beispiel: ${exampleFor(def, upper)}`);
+  add('code', d.helpExample(exampleFor(def, upper)));
   return box;
 }
 
@@ -266,6 +271,10 @@ export interface ProgramEditor {
   setExecLine(line: number | null, kind?: ExecLineKind): void;
   /** Lines (1-based) that carry a breakpoint. */
   getBreakpointLines(): number[];
+  /** Sets breakpoints on the given lines (1-based), replacing the old ones. */
+  setBreakpointLines(lines: readonly number[]): void;
+  /** Removes the editor from the page. */
+  destroy(): void;
   /** Moves the cursor to a line and focuses the editor. */
   goToLine(line: number): void;
   focus(): void;
@@ -309,8 +318,10 @@ export function createEditor(parent: HTMLElement, initialText: string, callbacks
       syntaxHighlighting(highlightStyle),
       execLineField,
       instructionHelp,
+      // Tooltips live in <body>, so they may extend beyond the editor's border.
+      tooltips({ parent: document.body }),
       editorTheme,
-      EditorView.contentAttributes.of({ 'aria-label': 'Assembler-Programm', spellcheck: 'false' }),
+      EditorView.contentAttributes.of({ 'aria-label': t().editorLabel, spellcheck: 'false' }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) callbacks.onChange();
         if (update.startState.field(breakpointField) !== update.state.field(breakpointField)) {
@@ -358,6 +369,17 @@ export function createEditor(parent: HTMLElement, initialText: string, callbacks
     },
 
     getBreakpointLines: () => breakpointLines(view),
+
+    setBreakpointLines(lines) {
+      const doc = view.state.doc;
+      const effects: StateEffect<unknown>[] = [clearBreakpointsEffect.of(null)];
+      for (const n of lines) {
+        if (n >= 1 && n <= doc.lines) effects.push(toggleBreakpointEffect.of({ pos: doc.line(n).from, on: true }));
+      }
+      view.dispatch({ effects });
+    },
+
+    destroy: () => view.destroy(),
 
     goToLine(line) {
       const target = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)));

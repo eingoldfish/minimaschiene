@@ -26,7 +26,7 @@ Produkt: WORD 0 # Platz für das Ergebnis
 /** Assembles and fails the test with readable messages if there are errors. */
 function ok(source: string): AssembleResult {
   const r = assemble(source);
-  expect(r.errors.map(formatError)).toEqual([]);
+  expect(r.errors.map((e) => formatError(e))).toEqual([]);
   return r;
 }
 

@@ -18,7 +18,7 @@ import {
   type MachinePart,
   type MicroStepEvent,
 } from '../core';
-import { MODE_NAMES } from './texts';
+import { t as tx } from './i18n';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -87,15 +87,15 @@ export class DiagramView {
       viewBox: '0 0 720 420',
       class: 'diagram',
       role: 'img',
-      'aria-label': 'Schaubild der Minimaschine: Rechenwerk, Steuerwerk, Busse und Speicher',
+      'aria-label': tx().diagramLabel,
     });
     this.element = root;
 
     // ----- frame -----
     root.append(svg('rect', { x: 10, y: 10, width: 440, height: 400, rx: 10, class: 'd-frame' }));
-    root.append(svg('text', { x: 22, y: 400, class: 'd-caption' }, 'Prozessor (CPU)'));
-    root.append(svg('text', { x: 40, y: 375, class: 'd-caption' }, 'Rechenwerk'));
-    root.append(svg('text', { x: 255, y: 375, class: 'd-caption' }, 'Steuerwerk'));
+    root.append(svg('text', { x: 22, y: 400, class: 'd-caption' }, tx().cpu));
+    root.append(svg('text', { x: 40, y: 375, class: 'd-caption' }, tx().aluUnit));
+    root.append(svg('text', { x: 255, y: 375, class: 'd-caption' }, tx().controlUnit));
 
     // ----- wires (all routes, drawn faintly) -----
     const wires = svg('g', { class: 'd-wires' });
@@ -116,7 +116,7 @@ export class DiagramView {
     }
 
     // ----- accumulator -----
-    this.addBox('acc', 40, 50, 160, 50, 'Akkumulator');
+    this.addBox('acc', 40, 50, 160, 50, tx().accShort);
     this.texts['acc'] = this.addValue(120, 90, 'd-value');
 
     // ----- ALU (Y shape) -----
@@ -127,11 +127,14 @@ export class DiagramView {
     this.parts.set('alu', alu);
     root.append(alu);
     root.append(svg('text', { x: 160, y: 255, class: 'd-label' }, 'ALU'));
-    this.texts['alu-op'] = this.addValue(120, 200, 'd-alu-op');
-    this.texts['alu-calc'] = this.addValue(120, 225, 'd-small');
+    // Like a real ALU symbol: operands enter at the two arms, the result leaves at the bottom.
+    this.texts['alu-a'] = this.addValue(75, 162, 'd-alu-in');
+    this.texts['alu-b'] = this.addValue(165, 162, 'd-alu-in');
+    this.texts['alu-op'] = this.addValue(120, 198, 'd-alu-op');
+    this.texts['alu-result'] = this.addValue(120, 230, 'd-alu-out');
 
     // ----- status register -----
-    this.addBox('flags', 40, 290, 160, 50, 'Statusregister');
+    this.addBox('flags', 40, 290, 160, 50, tx().statusRegister);
     const flagEls = {} as Record<'z' | 'n' | 'v' | 'c', SVGGElement>;
     (['z', 'n', 'v', 'c'] as const).forEach((f, i) => {
       const g = svg('g', { class: 'd-flag' });
@@ -143,29 +146,29 @@ export class DiagramView {
     this.flagEls = flagEls;
 
     // ----- instruction register -----
-    this.addBox('ir', 255, 50, 185, 50, 'Befehlsregister');
+    this.addBox('ir', 255, 50, 185, 50, tx().instructionRegister);
     root.append(svg('line', { x1: 370, y1: 68, x2: 370, y2: 100, class: 'd-divider' }));
     this.texts['ir-op'] = this.addValue(312, 92, 'd-value small');
     this.texts['ir-addr'] = this.addValue(405, 92, 'd-value small');
 
     // ----- decoder -----
-    this.addBox('decoder', 255, 130, 185, 60, 'Steuerwerk (Dekodierer)');
+    this.addBox('decoder', 255, 130, 185, 60, tx().decoder);
     this.texts['decoder'] = this.addValue(347, 162, 'd-small');
     this.texts['decoder2'] = this.addValue(347, 181, 'd-small muted');
 
     // ----- program counter -----
-    this.addBox('pc', 255, 220, 185, 50, 'Befehlszähler (PC)');
+    this.addBox('pc', 255, 220, 185, 50, tx().programCounter);
     this.texts['pc'] = this.addValue(347, 260, 'd-value');
 
     // ----- stack pointer (extended mode only) -----
-    this.addBox('sp', 255, 290, 185, 50, 'Stackpointer (SP)', 'extended-only');
+    this.addBox('sp', 255, 290, 185, 50, tx().stackPointer, 'extended-only');
     this.texts['sp'] = this.addValue(347, 330, 'd-value extended-only');
 
     // ----- memory -----
     const mem = svg('rect', { x: 560, y: 30, width: 150, height: 370, rx: 8, class: 'd-part' });
     this.parts.set('memory', mem);
     root.append(mem);
-    root.append(svg('text', { x: 572, y: 52, class: 'd-label' }, 'Speicher'));
+    root.append(svg('text', { x: 572, y: 52, class: 'd-label' }, tx().memory));
     for (let i = 0; i < MEMORY_ROWS; i++) {
       const y = 70 + i * 46;
       const group = svg('g', { class: 'd-mem-row' });
@@ -204,12 +207,12 @@ export class DiagramView {
     let decoded = '';
     let decoded2 = '';
     if (state.micro && state.micro.index < 3) {
-      decoded = state.micro.index === 0 ? '' : 'holt den Befehl …';
+      decoded = state.micro.index === 0 ? '' : tx().fetching;
     } else if (!noInstruction && def && ir.mode) {
       decoded = disassemble(encodeWord1(def, ir.mode), ir.address, ctx.labelAt).text;
-      decoded2 = MODE_NAMES[ir.mode];
+      decoded2 = tx().modes[ir.mode];
     }
-    if (event?.phase === 'decode' && event.title.includes('unbekannt')) decoded = 'unbekannter Befehl!';
+    if (event?.phase === 'decode' && !def) decoded = tx().unknownInstruction;
     t['decoder']!.textContent = decoded;
     t['decoder2']!.textContent = decoded2;
 
@@ -228,20 +231,26 @@ export class DiagramView {
     const t = this.texts;
 
     // ALU: operation and calculation of this micro step
-    if (event?.alu) {
-      t['alu-op']!.textContent = event.alu.op;
-      t['alu-calc']!.textContent = event.alu.op === '→'
-        ? `${toSigned16(event.alu.b)}`
-        : `${toSigned16(event.alu.a)} ${event.alu.op} ${toSigned16(event.alu.b)} = ${toSigned16(event.alu.result)}`;
+    // ALU: the calculation of this micro step, otherwise the last one (stays visible after whole steps).
+    const calc = event?.alu ?? state.lastAlu;
+    if (calc) {
+      const passThrough = calc.op === '→'; // LOAD, POP, LOADC: only the operand matters
+      const unary = calc.op === 'not';
+      t['alu-a']!.textContent = passThrough ? '' : String(toSigned16(calc.a));
+      t['alu-b']!.textContent = unary ? '' : String(toSigned16(calc.b));
+      t['alu-op']!.textContent = calc.op === 'cmp' ? '−' : calc.op;
+      t['alu-op']!.classList.toggle('long', calc.op.length > 2);
+      // CMP only sets the flags: the result is shown in brackets, it does not go to the accumulator.
+      t['alu-result']!.textContent = calc.op === 'cmp' ? `(${toSigned16(calc.result)})` : String(toSigned16(calc.result));
     } else {
-      t['alu-op']!.textContent = '';
-      t['alu-calc']!.textContent = '';
+      for (const key of ['alu-a', 'alu-b', 'alu-op', 'alu-result']) t[key]!.textContent = '';
     }
 
     const b = event?.bus ?? {};
-    t['bus-data']!.textContent = b.data !== undefined ? `Datenbus: ${b.data}` : 'Datenbus';
-    t['bus-address']!.textContent = b.address !== undefined ? `Adressbus: ${b.address}` : 'Adressbus';
-    t['bus-control']!.textContent = b.control ? `Steuerbus: ${b.control}` : 'Steuerbus';
+    const d = tx();
+    t['bus-data']!.textContent = b.data !== undefined ? `${d.dataBus}: ${b.data}` : d.dataBus;
+    t['bus-address']!.textContent = b.address !== undefined ? `${d.addressBus}: ${b.address}` : d.addressBus;
+    t['bus-control']!.textContent = b.control ? `${d.controlBus}: ${b.control === 'read' ? d.busRead : d.busWrite}` : d.controlBus;
     this.busLines.data.classList.toggle('active', b.data !== undefined);
     this.busLines.address.classList.toggle('active', b.address !== undefined);
     this.busLines.control.classList.toggle('active', b.control !== undefined);

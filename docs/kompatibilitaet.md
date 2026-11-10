@@ -99,6 +99,11 @@ Vorbelegung der Flags mit `CMPI` (C=1/N=1 bzw. V=1), dann der Befehl.
 
 ## Bewusste Neuerungen gegenüber dem Original
 
+- **Zweisprachig (Deutsch/Englisch):** Die gesamte Oberfläche ist umschaltbar, auch Assemblermeldungen, Mikroschritt-Erklärungen, Befehlshilfe und Beispielprogramme. Die Befehlsnamen (Mnemonics) bleiben gleich, Programme laufen also in beiden Sprachen.
+- **Kopierknöpfe:** Programmtext und Speicher lassen sich kopieren. Beim Speicher wird nur bis zur letzten belegten Zelle kopiert, als Tabelle wie angezeigt; ein benutzter Stack kommt als eigener Block dazu.
+- **Beamer-Modus:** große Schrift und automatisch helle Farben.
+- **Befehlshilfe** (Tooltip im Editor) darf über den Rand des Editors hinausragen.
+
 - **`RSV n` / `REL n`** (M5, Punkt 22): `RSV 3` und `REL 3` ließen sich im Original nicht assemblieren; bei uns gibt es beide Befehle wie im Manual beschrieben (SP − n bzw. SP + n). Sie reservieren bzw. geben Platz für lokale Variablen auf dem Stack frei. Programme, die sie benutzen, laufen deshalb evtl. nicht im Original.
 - **Speichern, Teilen, Offline** (M6): automatisches Speichern im Browser, Teilen-Link mit dem komprimierten Programm im URL-Fragment (`#code=…`, kein Server), Offline-Nutzung als PWA, sechs eigene Beispielprogramme (Multiplikation, Summe, Maximum, Fakultät, ggT, Unterprogramm).
 - **Mikroschritte mit Erklärung** (M4): Zu jedem Mikroschritt erscheint ein Erklärtext mit den konkreten Werten; Werte wandern animiert über die Busse (abschaltbar, bei `prefers-reduced-motion` aus). Auch Mikroschritte lassen sich mit „Schritt zurück“ einzeln zurücknehmen; „Schritt“ führt einen angefangenen Befehl zu Ende.

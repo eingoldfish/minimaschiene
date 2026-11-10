@@ -9,6 +9,7 @@
  */
 import {
   assemble,
+  type Language,
   Cpu,
   type AssembleResult,
   type CpuState,
@@ -27,6 +28,8 @@ export const MAX_HISTORY = 100_000;
 
 export class Session {
   readonly cpu = new Cpu();
+  /** Language of assembler messages and micro step explanations. */
+  language: Language = 'de';
   /** Last successfully assembled program (null before the first one). */
   program: AssembleResult | null = null;
   private history: UndoRecord[] = [];
@@ -34,6 +37,11 @@ export class Session {
   private breakpointLines = new Set<number>();
   /** Addresses derived from breakpointLines and the current program. */
   private breakpointAddresses = new Set<number>();
+
+  setLanguage(lang: Language): void {
+    this.language = lang;
+    this.cpu.language = lang;
+  }
 
   get state(): Readonly<CpuState> {
     return this.cpu.getState();
@@ -46,6 +54,7 @@ export class Session {
   assemble(source: string, options: { keepMemory?: boolean; extended?: boolean } = {}): AssembleResult {
     const result = assemble(source, {
       extended: options.extended,
+      lang: this.language,
       keepMemory: options.keepMemory ? this.state.memory : undefined,
     });
     if (result.ok) {

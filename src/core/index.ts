@@ -3,6 +3,7 @@
  * never from the individual modules.
  */
 export * from './format';
+export * from './lang';
 export * from './isa';
 export * from './alu';
 export * from './cpu';

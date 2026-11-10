@@ -16,6 +16,7 @@
  *   Adresse = Marke | Zahl | HexZahl .
  */
 import { MEMORY_SIZE, toUnsigned16 } from './format';
+import type { Language } from './lang';
 import {
   allMnemonicNames,
   encodeWord1,
@@ -29,7 +30,7 @@ import {
 // Public types
 // ====================================================================
 
-/** One error found while assembling, with a beginner-friendly German message. */
+/** One error found while assembling, with a beginner-friendly message (German or English). */
 export interface AssembleError {
   /** 1-based line number in the source. */
   line: number;
@@ -37,7 +38,7 @@ export interface AssembleError {
   column: number;
   /** Length of the problematic part (for underlining in the editor). */
   length: number;
-  /** Message in German, e.g. "Die Marke ‚Ende‘ wird benutzt, aber nirgends festgelegt." */
+  /** Message, e.g. "Die Marke ‚Ende‘ wird benutzt, aber nirgends festgelegt." */
   message: string;
   /** Optional hint how to fix it, e.g. "Hast du ‚Ende:‘ vergessen?" */
   hint?: string;
@@ -67,12 +68,23 @@ export interface AssembleOptions {
    * If omitted, memory starts cleared.
    */
   keepMemory?: Uint16Array;
+  /** Language of the error messages (default: German). */
+  lang?: Language;
 }
 
 /** Formats an error for display, e.g. "Zeile 4: … Hast du ‚Ende:‘ vergessen?" */
-export function formatError(e: AssembleError): string {
-  return `Zeile ${e.line}: ${e.message}${e.hint ? ' ' + e.hint : ''}`;
+export function formatError(e: AssembleError, lang: Language = 'de'): string {
+  return `${lang === 'en' ? 'Line' : 'Zeile'} ${e.line}: ${e.message}${e.hint ? ' ' + e.hint : ''}`;
 }
+
+/**
+ * Language of the assemble() call that is running right now. assemble() is
+ * synchronous, so a module variable is safe and saves passing it everywhere.
+ */
+let lang: Language = 'de';
+
+/** Picks the text in the current language. */
+const tr = (de: string, en: string): string => (lang === 'en' ? en : de);
 
 // ====================================================================
 // Pass 0: tokenizer
@@ -120,8 +132,8 @@ function tokenize(text: string, line: number, errors: AssembleError[]): Token[] 
       if (isHex && t.length === 2) {
         errors.push({
           line, column, length: 2,
-          message: 'Nach ‚0x‘ fehlen die Hexadezimalziffern.',
-          hint: 'Beispiel: ‚0x1F‘.',
+          message: tr('Nach ‚0x‘ fehlen die Hexadezimalziffern.', 'The hex digits after ‘0x’ are missing.'),
+          hint: tr('Beispiel: ‚0x1F‘.', 'Example: ‘0x1F’.'),
         });
         return null;
       }
@@ -132,8 +144,8 @@ function tokenize(text: string, line: number, errors: AssembleError[]): Token[] 
         const word = t + glued[0];
         errors.push({
           line, column, length: word.length,
-          message: `‚${word}‘ ist kein gültiger Name.`,
-          hint: 'Marken müssen mit einem Buchstaben beginnen, z. B. ‚Wert1‘.',
+          message: tr(`‚${word}‘ ist kein gültiger Name.`, `‘${word}’ is not a valid name.`),
+          hint: tr('Marken müssen mit einem Buchstaben beginnen, z. B. ‚Wert1‘.', 'Labels must start with a letter, e.g. ‘value1’.'),
         });
         return null;
       }
@@ -150,11 +162,12 @@ function tokenize(text: string, line: number, errors: AssembleError[]): Token[] 
 
     let hint: string | undefined;
     if (ch === ';' || (ch === '/' && text[i + 1] === '/')) {
-      hint = 'Kommentare beginnen mit ‚#‘.';
+      hint = tr('Kommentare beginnen mit ‚#‘.', 'Comments start with ‘#’.');
     } else if ('+*/'.includes(ch)) {
-      hint = 'In einer Adresse kann man nicht rechnen. Benutze dafür Befehle wie ‚ADDI‘ oder ‚MULI‘.';
+      hint = tr('In einer Adresse kann man nicht rechnen. Benutze dafür Befehle wie ‚ADDI‘ oder ‚MULI‘.',
+        'You cannot calculate inside an address. Use instructions like ‘ADDI’ or ‘MULI’ instead.');
     }
-    errors.push({ line, column, length: 1, message: `Das Zeichen ‚${ch}‘ ist hier nicht erlaubt.`, hint });
+    errors.push({ line, column, length: 1, message: tr(`Das Zeichen ‚${ch}‘ ist hier nicht erlaubt.`, `The character ‘${ch}’ is not allowed here.`), hint });
     return null;
   }
   return tokens;
@@ -210,24 +223,25 @@ class LineParser {
     const first = t[0]!;
     if (t[1]?.text === ':') {
       if (first.kind !== 'ident') {
-        return this.fail(first, `‚${first.text}‘ ist keine gültige Marke.`,
-          'Eine Marke muss mit einem Buchstaben beginnen, z. B. ‚Schleife1:‘.');
+        return this.fail(first, tr(`‚${first.text}‘ ist keine gültige Marke.`, `‘${first.text}’ is not a valid label.`),
+          tr('Eine Marke muss mit einem Buchstaben beginnen, z. B. ‚Schleife1:‘.', 'A label must start with a letter, e.g. ‘loop1:’.'));
       }
       result.label = { name: first.text, column: first.column };
       this.p = 2;
     } else if (first.text === ':') {
-      return this.fail(first, 'Vor dem Doppelpunkt fehlt der Name der Marke.');
+      return this.fail(first, tr('Vor dem Doppelpunkt fehlt der Name der Marke.', 'The label name is missing before the colon.'));
     }
     if (this.atEnd()) return result;
 
     // ----- operation -----
     const opTok = this.next();
     if (opTok.kind !== 'ident') {
-      return this.fail(opTok, `Hier wird ein Befehl erwartet, aber da steht ‚${opTok.text}‘.`,
-        'Eine Zeile beginnt mit einer Marke (z. B. ‚Start:‘) oder einem Befehl (z. B. ‚LOAD 20‘).');
+      return this.fail(opTok, tr(`Hier wird ein Befehl erwartet, aber da steht ‚${opTok.text}‘.`, `An instruction is expected here, but there is ‘${opTok.text}’.`),
+        tr('Eine Zeile beginnt mit einer Marke (z. B. ‚Start:‘) oder einem Befehl (z. B. ‚LOAD 20‘).',
+          'A line starts with a label (e.g. ‘start:’) or an instruction (e.g. ‘LOAD 20’).'));
     }
     if (this.peek()?.text === ':') {
-      return this.fail(this.peek()!, 'In einer Zeile darf nur eine Marke stehen.');
+      return this.fail(this.peek()!, tr('In einer Zeile darf nur eine Marke stehen.', 'Only one label is allowed per line.'));
     }
     result.op = { name: opTok.text, column: opTok.column };
     if (this.atEnd()) return result;
@@ -239,8 +253,10 @@ class LineParser {
 
     if (!this.atEnd()) {
       const extra = this.peek()!;
-      return this.fail(extra, `Nach der Adresse steht noch ‚${this.rest(extra)}‘ – das ist zu viel.`,
-        'Pro Zeile ist nur ein Befehl mit einer Adresse erlaubt. Kommentare beginnen mit ‚#‘.');
+      return this.fail(extra, tr(`Nach der Adresse steht noch ‚${this.rest(extra)}‘ – das ist zu viel.`,
+        `After the address there is still ‘${this.rest(extra)}’ – that is too much.`),
+        tr('Pro Zeile ist nur ein Befehl mit einer Adresse erlaubt. Kommentare beginnen mit ‚#‘.',
+          'Only one instruction with one address is allowed per line. Comments start with ‘#’.'));
     }
     return result;
   }
@@ -253,7 +269,7 @@ class LineParser {
     if (start.text === '(') {
       this.next();
       value = this.parseAddress();
-      if (!value || !this.expect(')', 'Die schließende Klammer ‚)‘ fehlt.')) return null;
+      if (!value || !this.expect(')', tr('Die schließende Klammer ‚)‘ fehlt.', 'The closing bracket ‘)’ is missing.'))) return null;
       syntax = 'indirect';
     } else if (start.text === '$') {
       this.next();
@@ -270,8 +286,8 @@ class LineParser {
       value = this.parseAddress();
       if (!value) return null;
       if (this.peek()?.text !== '(') {
-        return this.fail(this.peek() ?? start, '‚@‘ gibt es nur in der Form ‚@Adresse(SP)‘.',
-          'Für indirekte Adressierung schreibt man ‚(Adresse)‘, z. B. ‚LOAD (20)‘.');
+        return this.fail(this.peek() ?? start, tr('‚@‘ gibt es nur in der Form ‚@Adresse(SP)‘.', '‘@’ only exists in the form ‘@address(SP)’.'),
+          tr('Für indirekte Adressierung schreibt man ‚(Adresse)‘, z. B. ‚LOAD (20)‘.', 'For indirect addressing write ‘(address)’, e.g. ‘LOAD (20)’.'));
       }
       if (!this.parseSpSuffix()) return null;
       syntax = 'offsetIndirect';
@@ -301,13 +317,13 @@ class LineParser {
   private parseAddress(): OperandValue | null {
     const tok = this.peek();
     if (!tok) {
-      return this.fail(this.tokens[this.p - 1]!, 'Hier fehlt eine Adresse (Zahl oder Marke).');
+      return this.fail(this.tokens[this.p - 1]!, tr('Hier fehlt eine Adresse (Zahl oder Marke).', 'An address (number or label) is missing here.'));
     }
     if (tok.text === '-') {
       this.next();
       const num = this.peek();
       if (num?.kind !== 'number') {
-        return this.fail(num ?? tok, 'Nach dem Minuszeichen muss eine Zahl stehen.');
+        return this.fail(num ?? tok, tr('Nach dem Minuszeichen muss eine Zahl stehen.', 'A number must follow the minus sign.'));
       }
       this.next();
       return { kind: 'number', value: num.value ?? 0, negative: true };
@@ -320,7 +336,7 @@ class LineParser {
       this.next();
       return { kind: 'label', name: tok.text };
     }
-    return this.fail(tok, `Hier wird eine Zahl oder Marke erwartet, aber da steht ‚${tok.text}‘.`);
+    return this.fail(tok, tr(`Hier wird eine Zahl oder Marke erwartet, aber da steht ‚${tok.text}‘.`, `A number or label is expected here, but there is ‘${tok.text}’.`));
   }
 
   /** Parses "(SP)". */
@@ -328,12 +344,13 @@ class LineParser {
     const open = this.next(); // "("
     const sp = this.peek();
     if (sp?.kind !== 'ident' || sp.text.toUpperCase() !== 'SP') {
-      this.fail(sp ?? open, 'Nach einer Adresse ist nur ‚(SP)‘ erlaubt.',
-        'Für indirekte Adressierung schreibt man die Klammern um die ganze Adresse: ‚(20)‘.');
+      this.fail(sp ?? open, tr('Nach einer Adresse ist nur ‚(SP)‘ erlaubt.', 'Only ‘(SP)’ is allowed after an address.'),
+        tr('Für indirekte Adressierung schreibt man die Klammern um die ganze Adresse: ‚(20)‘.',
+          'For indirect addressing put the brackets around the whole address: ‘(20)’.'));
       return false;
     }
     this.next();
-    return this.expect(')', 'Die schließende Klammer ‚)‘ fehlt.');
+    return this.expect(')', tr('Die schließende Klammer ‚)‘ fehlt.', 'The closing bracket ‘)’ is missing.'));
   }
 
   private expect(symbol: string, message: string): boolean {
@@ -417,14 +434,27 @@ function suggestMnemonic(name: string): string | undefined {
   return closest(name.toUpperCase(), allMnemonicNames());
 }
 
-const SYNTAX_EXAMPLE: Record<OperandSyntax, string> = {
-  plain: 'Adresse',
-  indirect: '(Adresse)',
-  immediate: '$Zahl',
-  offset: 'Adresse(SP)',
-  offsetIndirect: '@Adresse(SP)',
-  immediateOffset: '$Adresse(SP)',
+const SYNTAX_EXAMPLES: Record<Language, Record<OperandSyntax, string>> = {
+  de: {
+    plain: 'Adresse',
+    indirect: '(Adresse)',
+    immediate: '$Zahl',
+    offset: 'Adresse(SP)',
+    offsetIndirect: '@Adresse(SP)',
+    immediateOffset: '$Adresse(SP)',
+  },
+  en: {
+    plain: 'address',
+    indirect: '(address)',
+    immediate: '$number',
+    offset: 'address(SP)',
+    offsetIndirect: '@address(SP)',
+    immediateOffset: '$address(SP)',
+  },
 };
+
+/** How an operand form is written, e.g. "(Adresse)", in the current language. */
+const syntaxExample = (syntax: OperandSyntax) => SYNTAX_EXAMPLES[lang][syntax];
 
 // ====================================================================
 // The assembler
@@ -437,6 +467,7 @@ interface Item {
 }
 
 export function assemble(source: string, options: AssembleOptions = {}): AssembleResult {
+  lang = options.lang ?? 'de';
   const errors: AssembleError[] = [];
   const labels = new Map<string, number>();
   const labelLines = new Map<string, number>();
@@ -464,14 +495,16 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
       if (isReservedName(name)) {
         errors.push({
           line: lineNo, column, length: name.length,
-          message: `‚${name}‘ ist ein Befehlsname und kann nicht als Marke benutzt werden.`,
-          hint: `Wähle einen anderen Namen, z. B. ‚${name}1‘ oder ‚Wert‘.`,
+          message: tr(`‚${name}‘ ist ein Befehlsname und kann nicht als Marke benutzt werden.`,
+            `‘${name}’ is an instruction name and cannot be used as a label.`),
+          hint: tr(`Wähle einen anderen Namen, z. B. ‚${name}1‘ oder ‚Wert‘.`, `Choose another name, e.g. ‘${name}1’ or ‘value’.`),
         });
       } else if (labels.has(name)) {
         errors.push({
           line: lineNo, column, length: name.length,
-          message: `Die Marke ‚${name}‘ wurde schon in Zeile ${labelLines.get(name)} festgelegt.`,
-          hint: 'Jede Marke darf nur einmal mit Doppelpunkt vorkommen.',
+          message: tr(`Die Marke ‚${name}‘ wurde schon in Zeile ${labelLines.get(name)} festgelegt.`,
+            `The label ‘${name}’ was already defined in line ${labelLines.get(name)}.`),
+          hint: tr('Jede Marke darf nur einmal mit Doppelpunkt vorkommen.', 'Each label may be defined (with a colon) only once.'),
         });
       } else {
         labels.set(name, address);
@@ -486,7 +519,7 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
         overflowReported = true;
         errors.push({
           line: lineNo, column: parsed.op.column, length: parsed.op.name.length,
-          message: 'Das Programm passt nicht mehr in den Speicher (65536 Zellen).',
+          message: tr('Das Programm passt nicht mehr in den Speicher (65536 Zellen).', 'The program does not fit into memory (65536 cells).'),
         });
       }
     }
@@ -506,32 +539,34 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
       const sameLetters = [...labels.keys()].find((l) => l.toLowerCase() === v.name.toLowerCase());
       const typo = sameLetters ? undefined : closest(v.name, [...labels.keys()]);
       err(line, operand.column, operand.length,
-        `Die Marke ‚${v.name}‘ wird benutzt, aber nirgends festgelegt.`,
+        tr(`Die Marke ‚${v.name}‘ wird benutzt, aber nirgends festgelegt.`, `The label ‘${v.name}’ is used but never defined.`),
         sameLetters
-          ? `Meintest du ‚${sameLetters}‘? Bei Marken wird zwischen Groß- und Kleinschreibung unterschieden.`
+          ? tr(`Meintest du ‚${sameLetters}‘? Bei Marken wird zwischen Groß- und Kleinschreibung unterschieden.`,
+            `Did you mean ‘${sameLetters}’? Labels are case-sensitive.`)
           : typo
-            ? `Meintest du ‚${typo}‘? Oder hast du ‚${v.name}:‘ vergessen?`
-            : `Hast du ‚${v.name}:‘ vergessen?`);
+            ? tr(`Meintest du ‚${typo}‘? Oder hast du ‚${v.name}:‘ vergessen?`, `Did you mean ‘${typo}’? Or did you forget ‘${v.name}:’?`)
+            : tr(`Hast du ‚${v.name}:‘ vergessen?`, `Did you forget ‘${v.name}:’?`));
       return 0;
     }
     const n = v.negative ? -v.value : v.value;
     if (v.negative && !allowNegative) {
       err(line, operand.column, operand.length,
-        `Eine Adresse kann nicht negativ sein (‚${operand.text}‘).`,
-        'Adressen gehen von 0 bis 65535. Negative Zahlen gehen nur bei Zahlen-Befehlen wie ‚LOADI -5‘ oder ‚WORD -5‘.');
+        tr(`Eine Adresse kann nicht negativ sein (‚${operand.text}‘).`, `An address cannot be negative (‘${operand.text}’).`),
+        tr('Adressen gehen von 0 bis 65535. Negative Zahlen gehen nur bei Zahlen-Befehlen wie ‚LOADI -5‘ oder ‚WORD -5‘.',
+          'Addresses go from 0 to 65535. Negative numbers only work with number instructions like ‘LOADI -5’ or ‘WORD -5’.'));
       return 0;
     }
     // Note: plain "-" (not "−") so students can copy the numbers into the editor.
     if (allowNegative && (n < -32768 || n > 65535)) {
       err(line, operand.column, operand.length,
-        `Die Zahl ${n} passt nicht in eine Speicherzelle.`,
-        'Erlaubt sind Zahlen von -32768 bis 65535.');
+        tr(`Die Zahl ${n} passt nicht in eine Speicherzelle.`, `The number ${n} does not fit into a memory cell.`),
+        tr('Erlaubt sind Zahlen von -32768 bis 65535.', 'Allowed are numbers from -32768 to 65535.'));
       return 0;
     }
     if (!allowNegative && n > 65535) {
       err(line, operand.column, operand.length,
-        `Die Adresse ${n} gibt es nicht.`,
-        'Adressen gehen von 0 bis 65535.');
+        tr(`Die Adresse ${n} gibt es nicht.`, `The address ${n} does not exist.`),
+        tr('Adressen gehen von 0 bis 65535.', 'Addresses go from 0 to 65535.'));
       return 0;
     }
     return toUnsigned16(n);
@@ -546,11 +581,13 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
     // ----- WORD: reserve one cell with an initial value -----
     if (upper === WORD_DIRECTIVE) {
       if (!operand) {
-        err(line, op.column, op.name.length, '‚WORD‘ braucht einen Wert.', 'Beispiel: ‚Zähler: WORD 0‘.');
+        err(line, op.column, op.name.length, tr('‚WORD‘ braucht einen Wert.', '‘WORD’ needs a value.'),
+          tr('Beispiel: ‚Zähler: WORD 0‘.', 'Example: ‘counter: WORD 0’.'));
         continue;
       }
       if (operand.syntax !== 'plain') {
-        err(line, operand.column, operand.length, `Nach ‚WORD‘ steht nur eine Zahl oder Marke, ohne ‚$‘, ‚@‘ oder Klammern.`);
+        err(line, operand.column, operand.length, tr('Nach ‚WORD‘ steht nur eine Zahl oder Marke, ohne ‚$‘, ‚@‘ oder Klammern.',
+          '‘WORD’ is followed by just a number or label, without ‘$’, ‘@’ or brackets.'));
         continue;
       }
       memory[item.address] = resolve(item, operand, true);
@@ -564,18 +601,19 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
     if (!found) {
       const suggestion = suggestMnemonic(op.name);
       const hint = suggestion
-        ? `Meintest du ‚${suggestion}‘?`
+        ? tr(`Meintest du ‚${suggestion}‘?`, `Did you mean ‘${suggestion}’?`)
         : !operand
-          ? `Soll ‚${op.name}‘ eine Marke sein? Dann fehlt der Doppelpunkt: ‚${op.name}:‘.`
+          ? tr(`Soll ‚${op.name}‘ eine Marke sein? Dann fehlt der Doppelpunkt: ‚${op.name}:‘.`,
+            `Is ‘${op.name}’ meant to be a label? Then the colon is missing: ‘${op.name}:’.`)
           : undefined;
-      err(line, op.column, op.name.length, `‚${op.name}‘ ist kein bekannter Befehl.`, hint);
+      err(line, op.column, op.name.length, tr(`‚${op.name}‘ ist kein bekannter Befehl.`, `‘${op.name}’ is not a known instruction.`), hint);
       continue;
     }
     const { def, forcedMode } = found;
     if (def.extendedOnly && !options.extended) {
       err(line, op.column, op.name.length,
-        `Den Befehl ‚${op.name}‘ gibt es nur im erweiterten Modus.`,
-        'Schalte „Erweiterter Modus“ ein, um Stackbefehle zu benutzen.');
+        tr(`Den Befehl ‚${op.name}‘ gibt es nur im erweiterten Modus.`, `The instruction ‘${op.name}’ only exists in extended mode.`),
+        tr('Schalte „Erweiterter Modus“ ein, um Stackbefehle zu benutzen.', 'Switch on “Extended mode” to use stack instructions.'));
       continue;
     }
     const needsAddress = !def.modes.includes('none');
@@ -583,13 +621,18 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
     // ----- operand present / missing? -----
     if (!needsAddress && operand) {
       err(line, operand.column, operand.length,
-        `‚${op.name}‘ braucht keine Adresse.`, `Lösche ‚${operand.text}‘.`);
+        tr(`‚${op.name}‘ braucht keine Adresse.`, `‘${op.name}’ does not need an address.`),
+        tr(`Lösche ‚${operand.text}‘.`, `Delete ‘${operand.text}’.`));
       continue;
     }
     if (needsAddress && !operand) {
       err(line, op.column, op.name.length,
-        `Nach ‚${op.name}‘ fehlt ${forcedMode ? 'eine Zahl' : 'eine Adresse'}.`,
-        forcedMode ? `Beispiel: ‚${op.name} 5‘.` : `Beispiel: ‚${op.name} 20‘ oder ‚${op.name} Marke‘.`);
+        forcedMode
+          ? tr(`Nach ‚${op.name}‘ fehlt eine Zahl.`, `A number is missing after ‘${op.name}’.`)
+          : tr(`Nach ‚${op.name}‘ fehlt eine Adresse.`, `An address is missing after ‘${op.name}’.`),
+        forcedMode
+          ? tr(`Beispiel: ‚${op.name} 5‘.`, `Example: ‘${op.name} 5’.`)
+          : tr(`Beispiel: ‚${op.name} 20‘ oder ‚${op.name} Marke‘.`, `Example: ‘${op.name} 20’ or ‘${op.name} label’.`));
       continue;
     }
 
@@ -600,17 +643,19 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
       if (forcedMode) {
         if (operand.syntax !== 'plain') {
           err(line, operand.column, operand.length,
-            `‚${op.name}‘ erwartet nur eine Zahl, ohne ‚$‘, ‚@‘ oder Klammern.`,
+            tr(`‚${op.name}‘ erwartet nur eine Zahl, ohne ‚$‘, ‚@‘ oder Klammern.`, `‘${op.name}’ expects just a number, without ‘$’, ‘@’ or brackets.`),
             def.immediateMnemonic === def.mnemonic
-              ? `Schreibe z. B. ‚${op.name} 5‘.`
-              : `Schreibe z. B. ‚${op.name} 5‘. ‚${def.mnemonic} ${SYNTAX_EXAMPLE[operand.syntax]}‘ wäre die Form ohne ‚I‘.`);
+              ? tr(`Schreibe z. B. ‚${op.name} 5‘.`, `Write e.g. ‘${op.name} 5’.`)
+              : tr(`Schreibe z. B. ‚${op.name} 5‘. ‚${def.mnemonic} ${syntaxExample(operand.syntax)}‘ wäre die Form ohne ‚I‘.`,
+                `Write e.g. ‘${op.name} 5’. ‘${def.mnemonic} ${syntaxExample(operand.syntax)}’ would be the form without ‘I’.`));
           continue;
         }
         mode = forcedMode;
       } else if (!options.extended && (operand.syntax === 'offset' || operand.syntax === 'offsetIndirect' || operand.syntax === 'immediateOffset')) {
         err(line, operand.column, operand.length,
-          `Die Adressierung ‚${SYNTAX_EXAMPLE[operand.syntax]}‘ gibt es nur im erweiterten Modus.`,
-          'Schalte „Erweiterter Modus“ ein, um den Stackpointer zu benutzen.');
+          tr(`Die Adressierung ‚${syntaxExample(operand.syntax)}‘ gibt es nur im erweiterten Modus.`,
+            `The addressing ‘${syntaxExample(operand.syntax)}’ only exists in extended mode.`),
+          tr('Schalte „Erweiterter Modus“ ein, um den Stackpointer zu benutzen.', 'Switch on “Extended mode” to use the stack pointer.'));
         continue;
       } else {
         mode = operand.syntax === 'plain' ? 'direct' : operand.syntax;
@@ -619,12 +664,14 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
       if (!def.modes.includes(mode)) {
         let hint: string | undefined;
         if (def.group === 'jump') {
-          hint = `Sprungbefehle brauchen eine direkte Adresse: ‚${op.name} 20‘ oder ‚${op.name} Marke‘.`;
+          hint = tr(`Sprungbefehle brauchen eine direkte Adresse: ‚${op.name} 20‘ oder ‚${op.name} Marke‘.`,
+            `Jump instructions need a direct address: ‘${op.name} 20’ or ‘${op.name} label’.`);
         } else if (def.mnemonic === 'STORE' && mode === 'immediate') {
-          hint = 'STORE schreibt in eine Speicherzelle – lass das ‚$‘ weg.';
+          hint = tr('STORE schreibt in eine Speicherzelle – lass das ‚$‘ weg.', 'STORE writes into a memory cell – leave out the ‘$’.');
         }
         err(line, operand.column, operand.length,
-          `‚${op.name}‘ kann nicht mit ‚${SYNTAX_EXAMPLE[operand.syntax]}‘ benutzt werden.`, hint);
+          tr(`‚${op.name}‘ kann nicht mit ‚${syntaxExample(operand.syntax)}‘ benutzt werden.`,
+            `‘${op.name}’ cannot be used with ‘${syntaxExample(operand.syntax)}’.`), hint);
         continue;
       }
       // Negative numbers are allowed for immediate operands and SP offsets (e.g. "LOAD -1(SP)").

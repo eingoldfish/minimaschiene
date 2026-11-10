@@ -9,7 +9,7 @@ const FIRST = SP_START - 1; // cell of the first PUSH (65533)
 /** Assembles in extended mode and runs until HALT. */
 function run(source: string, maxSteps = 10_000): Cpu {
   const r = assemble(source, { extended: true });
-  expect(r.errors.map(formatError)).toEqual([]);
+  expect(r.errors.map((e) => formatError(e))).toEqual([]);
   const cpu = new Cpu();
   cpu.loadMemory(r.memory);
   expect(cpu.run(maxSteps).reason).toBe('halt');

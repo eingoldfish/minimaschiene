@@ -6,8 +6,6 @@
  * with the full height makes the scrollbar behave as if all rows existed.
  */
 import {
-  disassembleAt,
-  formatWord,
   MEMORY_SIZE,
   parseWord,
   toHex16,
@@ -15,8 +13,10 @@ import {
   type CpuState,
 } from '../core';
 import { h, setChildren } from './dom';
+import { t } from './i18n';
+import { cellText, CELLS_PER_ROW, type MemoryFormat } from './memoryTable';
 
-export type MemoryFormat = 'signed' | 'unsigned' | 'hex' | 'opcodes';
+export type { MemoryFormat };
 
 export interface MemoryViewOptions {
   format: MemoryFormat;
@@ -26,7 +26,6 @@ export interface MemoryViewOptions {
   labelAt(address: number): string | undefined;
 }
 
-const CELLS_PER_ROW = 10;
 const ROW_COUNT = Math.ceil(MEMORY_SIZE / CELLS_PER_ROW);
 /** Row height in rem (must match --mem-row-h in styles.css). */
 const ROW_REM = 2.6;
@@ -45,7 +44,7 @@ export class MemoryView {
    */
   constructor(private readonly onEdit: (address: number, value: number) => void) {
     const header = h('div', { class: 'mem-row mem-header', 'aria-hidden': 'true' },
-      h('span', { class: 'mem-addr' }, 'Adresse'),
+      h('span', { class: 'mem-addr' }, t().addressColumn),
       ...Array.from({ length: CELLS_PER_ROW }, (_, i) => h('span', { class: 'mem-col' }, `+${i}`)));
     this.rowsBox = h('div', { class: 'mem-rows' });
     const spacer = h('div', { class: 'mem-spacer' }, this.rowsBox);
@@ -55,7 +54,7 @@ export class MemoryView {
       tabindex: '-1',
       onscroll: () => this.render(),
     }, spacer);
-    this.element = h('div', { class: 'mem-table', role: 'grid', 'aria-label': 'Speicher' }, header, this.viewport);
+    this.element = h('div', { class: 'mem-table', role: 'grid', 'aria-label': t().memoryLabel }, header, this.viewport);
   }
 
   update(state: Readonly<CpuState>, opts: MemoryViewOptions): void {
@@ -116,28 +115,16 @@ export class MemoryView {
     const isSp = opts.sp !== null && address === opts.sp;
     if (isSp) classes.push('is-sp');
 
-    let text: string;
-    let instruction = '';
-    if (opts.format === 'opcodes') {
-      const ins = disassembleAt(state.memory, address);
-      instruction = ins.text;
-      const space = ins.text.indexOf(' ');
-      const isWord1 = address === ins.start;
-      if (!ins.valid) text = isWord1 ? '---' : String(word);
-      else if (space < 0) text = isWord1 ? ins.text : '';
-      else text = isWord1 ? ins.text.slice(0, space) : ins.text.slice(space + 1);
-    } else {
-      text = formatWord(word, opts.format);
-    }
-
+    const { text, instruction } = cellText(state.memory, address, opts.format);
+    const d = t();
     const title = [
-      `Adresse ${address}${label ? ` (${label})` : ''}`,
-      `Inhalt: ${toSigned16(word)} · ${word} · ${toHex16(word)}`,
-      instruction ? `als Befehl: ${instruction}` : '',
-      isPc ? 'Hier steht der nächste Befehl (PC).' : '',
-      isSp ? 'Hierauf zeigt der Stackpointer (SP).' : '',
-      address === state.lastWrite ? 'Zuletzt geändert.' : '',
-      'Klicken zum Ändern.',
+      d.cellAddress(address, label),
+      d.cellContent(toSigned16(word), word, toHex16(word)),
+      instruction ? d.cellInstruction(instruction) : '',
+      isPc ? d.cellIsPc : '',
+      isSp ? d.cellIsSp : '',
+      address === state.lastWrite ? d.cellWritten : '',
+      d.cellClick,
     ].filter(Boolean).join('\n');
 
     return h('button', {
@@ -159,8 +146,8 @@ export class MemoryView {
     const input = h('input', {
       class: 'mem-input',
       value: initial,
-      'aria-label': `Neuer Wert für Adresse ${address}`,
-      title: 'Zahl eingeben (z. B. 42, -7 oder 0x2A), Enter zum Speichern, Esc zum Abbrechen',
+      'aria-label': t().cellEditLabel(address),
+      title: t().cellEditTitle,
     });
     let done = false;
     const finish = (save: boolean) => {
@@ -169,7 +156,7 @@ export class MemoryView {
         const value = parseWord(input.value);
         if (value === null) {
           input.classList.add('invalid');
-          input.title = 'Keine gültige Zahl. Erlaubt: -32768 bis 65535 oder 0x0000 bis 0xFFFF.';
+          input.title = t().cellEditInvalid;
           return;
         }
         done = true;

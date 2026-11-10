@@ -1,7 +1,9 @@
 /**
  * Example programs shipped with the app (own wording; the algorithms are
- * the usual school examples). Each one is executed in tests/examples.test.ts.
+ * the usual school examples), in German and English. Both versions of each
+ * example are executed in tests/examples.test.ts.
  */
+import type { Language } from '../core';
 
 export interface Example {
   id: string;
@@ -15,6 +17,7 @@ export interface Example {
   check: { label: string; expected: number };
 }
 
+/** German examples. */
 export const EXAMPLES: readonly Example[] = [
   {
     id: 'multiplikation',
@@ -204,5 +207,212 @@ Ergebnis: WORD 0
   },
 ];
 
+/** English examples (same ids, algorithms and results as the German ones). */
+export const EXAMPLES_EN: readonly Example[] = [
+  {
+    id: 'multiplikation',
+    title: 'Multiplication',
+    description: 'Product by repeated addition (example from the manual, own comments)',
+    extended: false,
+    check: { label: 'product', expected: 20 },
+    source: `# Multiplication by repeated addition:
+# product = factor1 · factor2
+
+        LOADI 0
+        STORE product      # start the product with 0
+loop:
+        LOAD factor1
+        JMPNP done         # counter <= 0? Then we are done.
+        SUBI 1             # decrease the counter by 1
+        STORE factor1
+        LOAD product
+        ADD factor2        # add factor2 once more
+        STORE product
+        JMP loop
+done:
+        HALT
+
+# Data
+factor1: WORD 5
+factor2: WORD 4
+product: WORD 0
+`,
+  },
+  {
+    id: 'summe',
+    title: 'Sum 1 + 2 + … + n',
+    description: 'Counting loop backwards: adds all numbers from n down to 1',
+    extended: false,
+    check: { label: 'sum', expected: 55 },
+    source: `# Sum of the numbers 1 + 2 + … + n
+# Idea: count n down to 0 and add every n to the sum.
+
+        LOADI 0
+        STORE sum          # start the sum with 0
+loop:
+        LOAD n
+        JMPZ done          # n = 0? Then we are done.
+        ADD sum
+        STORE sum          # sum = sum + n
+        LOAD n
+        SUBI 1
+        STORE n            # n = n - 1
+        JMP loop
+done:
+        HALT
+
+# Data
+n:      WORD 10
+sum:    WORD 0
+`,
+  },
+  {
+    id: 'maximum',
+    title: 'Maximum of a list',
+    description: 'Find the largest element – with indirect addressing through a pointer',
+    extended: false,
+    check: { label: 'max', expected: 12 },
+    source: `# Maximum of a list
+# A pointer walks over the list; (pointer) reads the element it points to.
+
+        LOADI list
+        STORE pointer      # pointer points to the first element
+        LOAD (pointer)
+        STORE max          # max = first element
+loop:
+        LOAD count
+        SUBI 1
+        STORE count
+        JMPNP done         # no elements left? Then we are done.
+        LOAD pointer
+        ADDI 1
+        STORE pointer      # pointer to the next element
+        LOAD (pointer)
+        CMP max            # compare the element with max
+        JMPNP loop         # element <= max? Then do nothing.
+        STORE max          # else: new maximum (CMP does not change the accumulator)
+        JMP loop
+done:
+        HALT
+
+# Data
+count:   WORD 6
+max:     WORD 0
+pointer: WORD 0
+list:    WORD 7
+         WORD -3
+         WORD 12
+         WORD 5
+         WORD 9
+         WORD 4
+`,
+  },
+  {
+    id: 'fakultaet',
+    title: 'Factorial n!',
+    description: 'n! = 1 · 2 · … · n – from 8! on, 16 bits are not enough (watch the V flag)',
+    extended: false,
+    check: { label: 'result', expected: 720 },
+    source: `# Factorial: result = n! = n · (n-1) · … · 1
+# Tip: try n = 8. The result 40320 no longer fits into
+# 16 bits with sign – watch the V flag after MUL.
+
+        LOADI 1
+        STORE result       # start the result with 1
+loop:
+        LOAD n
+        JMPNP done         # n <= 0? Then we are done.
+        MUL result
+        STORE result       # result = result · n
+        LOAD n
+        SUBI 1
+        STORE n            # n = n - 1
+        JMP loop
+done:
+        HALT
+
+# Data
+n:        WORD 6
+result:   WORD 0
+`,
+  },
+  {
+    id: 'ggt',
+    title: 'Greatest common divisor',
+    description: 'Euclidean algorithm with subtraction – branching with CMP',
+    extended: false,
+    check: { label: 'gcd', expected: 12 },
+    source: `# Greatest common divisor (Euclid, with subtraction)
+# As long as a and b differ: reduce the larger number by the smaller one.
+
+loop:
+        LOAD a
+        CMP b
+        JMPZ done          # a = b? Then this is the gcd.
+        JMPN smaller       # a < b?
+        SUB b
+        STORE a            # a = a - b
+        JMP loop
+smaller:
+        LOAD b
+        SUB a
+        STORE b            # b = b - a
+        JMP loop
+done:
+        STORE gcd          # the accumulator still holds a
+        HALT
+
+# Data
+a:   WORD 84
+b:   WORD 36
+gcd: WORD 0
+`,
+  },
+  {
+    id: 'unterprogramm',
+    title: 'Subroutine (extended mode)',
+    description: 'Square in a subroutine: parameter on the stack, JSR and RTS',
+    extended: true,
+    check: { label: 'result', expected: 49 },
+    source: `# Subroutine with a parameter on the stack
+# (extended mode only – tick “Extended mode”)
+
+        LOADI 7
+        PUSH               # put the parameter on the stack
+        JSR square         # call the subroutine
+        STORE result       # the return value is in the accumulator
+        POP                # take the parameter off the stack again
+        HALT
+
+# Subroutine: accumulator = parameter · parameter
+# On the stack: 0(SP) = return address, 1(SP) = parameter
+square:
+        LOAD 1(SP)
+        MUL 1(SP)
+        RTS
+
+# Data
+result: WORD 0
+`,
+  },
+];
+
+const BY_LANGUAGE: Record<Language, readonly Example[]> = { de: EXAMPLES, en: EXAMPLES_EN };
+
+/** Examples in the given language. */
+export function getExamples(lang: Language): readonly Example[] {
+  return BY_LANGUAGE[lang];
+}
+
+/** True if the text is one of the examples (in any language), unchanged. */
+export function isExampleSource(text: string): boolean {
+  return EXAMPLES.some((e) => e.source === text) || EXAMPLES_EN.some((e) => e.source === text);
+}
+
 /** Program shown on the very first start. */
-export const DEFAULT_PROGRAM = EXAMPLES[0]!.source;
+export function defaultProgram(lang: Language): string {
+  return getExamples(lang)[0]!.source;
+}
+
+/** German default program (kept for tests). */
+export const DEFAULT_PROGRAM = defaultProgram('de');

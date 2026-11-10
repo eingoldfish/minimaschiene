@@ -137,9 +137,9 @@ describe('micro step sequence', () => {
     do events.push(cpu.microStep()!);
     while (!events[events.length - 1]!.done);
     expect(events.map((e) => e.phase)).toEqual(['fetch', 'fetch', 'decode', 'execute', 'execute']);
-    expect(events[0]!.bus).toEqual({ address: 10, data: enc('ADD', 'direct'), control: 'lesen' });
-    expect(events[1]!.bus).toEqual({ address: 11, data: DATA_ADDR, control: 'lesen' });
-    expect(events[3]!.bus).toEqual({ address: DATA_ADDR, data: 3, control: 'lesen' });
+    expect(events[0]!.bus).toEqual({ address: 10, data: enc('ADD', 'direct'), control: 'read' });
+    expect(events[1]!.bus).toEqual({ address: 11, data: DATA_ADDR, control: 'read' });
+    expect(events[3]!.bus).toEqual({ address: DATA_ADDR, data: 3, control: 'read' });
     expect(events[4]!.alu).toEqual({ a: 5, b: 3, op: '+', result: 8 });
     expect(events[4]!.explanation).toContain('5 + 3 = 8');
     expect(events.map((e) => e.index)).toEqual([0, 1, 2, 3, 4]);

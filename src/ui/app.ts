@@ -5,49 +5,74 @@
  * Rule: the UI never changes the CPU directly, only through Session/Core
  * methods. After every action, render() redraws everything from the state.
  */
-import { disassembleAt, type AssembleError, type CyclePhase, type MicroStepEvent } from '../core';
+import { assemble as assembleSource, disassembleAt, type AssembleError, type CyclePhase, type Language, type MicroStepEvent } from '../core';
 import { DiagramView } from './diagramView';
 import { h, setChildren } from './dom';
 import { createEditor, type ProgramEditor } from './editor';
 import { loadFileName, loadSettings, loadSource, saveFileName, saveSettings, saveSource } from '../storage/autosave';
 import { openFile, saveFile, type SaveTarget } from '../storage/files';
 import { decodeShare, encodeShare } from '../storage/share';
-import { DEFAULT_PROGRAM, EXAMPLES } from './examples';
+import { defaultProgram, getExamples, isExampleSource } from './examples';
+import { defaultLanguage, keys, setLanguage, t } from './i18n';
+import { menu, menuHeading } from './menu';
+import { checkIcon, copyIcon, flagIcon, maximizeIcon, restoreIcon } from './icons';
 import { MachineView } from './machineView';
-import { MemoryView, type MemoryFormat } from './memoryView';
+import { MemoryView } from './memoryView';
+import { memoryAsTable, type MemoryFormat } from './memoryTable';
 import { Session, type StopReason } from './session';
-import { KEYS } from './texts';
 
 type StatusKind = 'info' | 'success' | 'warning' | 'error';
 type Theme = 'auto' | 'light' | 'dark';
+/** Which panel fills the window (phones: the editor covers the whole screen). */
+type Maximized = 'none' | 'editor' | 'machine';
 
-const SPEEDS: ReadonlyArray<{ label: string; perSecond: number }> = [
-  { label: '1 Befehl/s', perSecond: 1 },
-  { label: '2 Befehle/s', perSecond: 2 },
-  { label: '5 Befehle/s', perSecond: 5 },
-  { label: '10 Befehle/s', perSecond: 10 },
-  { label: '50 Befehle/s', perSecond: 50 },
-  { label: '500 Befehle/s', perSecond: 500 },
-  { label: 'Maximal', perSecond: Infinity },
-];
+/** Instructions per second for "Run" (Infinity = as fast as possible). */
+const SPEEDS: readonly number[] = [1, 2, 5, 10, 50, 500, Infinity];
 
-const THEME_LABELS: Record<Theme, string> = { auto: 'automatisch', light: 'hell', dark: 'dunkel' };
+/** Same width as the phone layout in styles.css. */
+const PHONE_QUERY = '(max-width: 600px)';
+const DARK_QUERY = '(prefers-color-scheme: dark)';
+
+/** How long unimportant status messages stay visible. */
+const TRANSIENT_STATUS_MS = 5000;
+
+const speedLabel = (perSecond: number) => (perSecond === Infinity ? t().speedMax : t().speedPerSecond(perSecond));
+
+/**
+ * State that survives a rebuild of the page (after switching the language):
+ * the machine, the program text with its breakpoints and the file info.
+ */
+interface AppCarry {
+  session: Session;
+  text: string;
+  breakpoints: number[];
+  fileName: string | null;
+  saveTarget: SaveTarget | undefined;
+  savedText: string | null;
+  programStale: boolean;
+  hadErrors: boolean;
+  scrollY: number;
+  machineTab: 'diagram' | 'registers';
+  maximized: Maximized;
+}
 
 /** Button with a visible keyboard shortcut. */
 function button(label: string, onclick: () => void, opts: { key?: string; title?: string; class?: string } = {}): HTMLButtonElement {
   return h('button', {
     type: 'button',
     class: opts.class ?? '',
-    title: [opts.title, opts.key ? `Tastenkürzel: ${opts.key}` : ''].filter(Boolean).join(' – '),
+    title: [opts.title, opts.key ? `${t().shortcut}: ${opts.key}` : ''].filter(Boolean).join(' – '),
     onclick,
   }, label, opts.key ? h('kbd', {}, opts.key) : null);
 }
 
 export class App {
-  private readonly session = new Session();
+  private readonly session: Session;
+  /** Removes the global event listeners when the page is rebuilt. */
+  private readonly listeners = new AbortController();
   private readonly editor: ProgramEditor;
   private readonly machine = new MachineView();
-  private readonly diagram = new DiagramView();
+  private readonly diagram: DiagramView;
   private readonly memory: MemoryView;
   /** The last micro step (shown in the diagram), null after whole steps. */
   private lastEvent: MicroStepEvent | null = null;
@@ -67,6 +92,12 @@ export class App {
   /** Extended mode: stack pointer and stack instructions. */
   private extended = false;
   private beamer = false;
+  /** Theme before the projector mode switched to light (restored afterwards). */
+  private themeBeforeBeamer: Theme | null = null;
+  private language: Language = defaultLanguage();
+  private maximized: Maximized = 'none';
+  /** Width of the program panel in percent of the area next to the machine (wide screens). */
+  private splitPercent = 50;
 
   // ----- file -----
   /** Name of the opened/saved file, null if never saved. */
@@ -76,6 +107,7 @@ export class App {
   /** Text at the last open/save/example load – to warn before replacing unsaved work. */
   private savedText: string | null = null;
   private autosaveTimer = 0;
+  private statusTimer = 0;
 
   // ----- run state -----
   /** The source was edited after the last successful assembling. */
@@ -90,33 +122,53 @@ export class App {
   private readonly statusEl: HTMLElement;
   private readonly errorList: HTMLElement;
   private readonly btn: Record<'stepBack' | 'step' | 'micro' | 'run' | 'reset', HTMLButtonElement>;
-  private readonly themeBtn: HTMLButtonElement;
+  /** Light/dark switches: one in the header (wide screens), one in the options menu (phones). */
+  private readonly themeSwitches: HTMLButtonElement[] = [];
   private readonly explanationEl: HTMLElement;
   private readonly spButton: HTMLButtonElement;
   private readonly fileNameEl: HTMLElement;
   private readonly tabButtons: Record<'diagram' | 'registers', HTMLButtonElement>;
   private readonly tabPanes: Record<'diagram' | 'registers', HTMLElement>;
+  private readonly mainEl: HTMLElement;
+  private readonly maxButtons: Record<'editor' | 'machine', HTMLButtonElement>;
 
-  constructor(root: HTMLElement) {
+  constructor(private readonly root: HTMLElement, carry?: AppCarry) {
     this.applySavedSettings(loadSettings());
+    setLanguage(this.language);
+    this.session = carry?.session ?? new Session();
+    this.session.setLanguage(this.language);
+    this.diagram = new DiagramView(); // its labels need the language
+    if (carry) {
+      this.fileName = carry.fileName;
+      this.saveTarget = carry.saveTarget;
+      this.savedText = carry.savedText;
+      this.programStale = carry.programStale;
+      this.machineTab = carry.machineTab;
+      this.maximized = carry.maximized;
+    } else if (window.matchMedia(PHONE_QUERY).matches) {
+      // Small screens: the registers are easier to read than the small diagram.
+      this.machineTab = 'registers';
+    }
+    const d = t();
+    const k = keys();
 
     // ----- header with run controls -----
     this.btn = {
-      stepBack: button('◀ Schritt zurück', () => this.stepBack(), { key: KEYS.stepBack, title: 'Den letzten Befehl rückgängig machen' }),
-      step: button('Schritt ▶', () => this.step(), { key: KEYS.step, title: 'Genau einen Befehl ausführen' }),
-      micro: button('Mikroschritt', () => void this.microStep(), { key: KEYS.microStep, title: 'Einen Teilschritt des Befehlszyklus (Holen – Dekodieren – Ausführen) ausführen und im Schaubild zeigen' }),
-      run: button('▶▶ Ausführen', () => this.toggleRun(), { key: KEYS.run, class: 'primary', title: 'Programm bis HALT, Haltepunkt oder Abbruchschranke ausführen' }),
-      reset: button('Zurücksetzen', () => this.reset(), { title: 'Akku, Befehlszähler und Flags auf 0 setzen. Der Speicher bleibt erhalten.' }),
+      stepBack: button(d.stepBack, () => this.stepBack(), { key: k.stepBack, title: d.stepBackTitle }),
+      step: button(d.step, () => this.step(), { key: k.step, title: d.stepTitle }),
+      micro: button(d.micro, () => void this.microStep(), { key: k.microStep, title: d.microTitle }),
+      run: button(d.run, () => this.toggleRun(), { key: k.run, class: 'primary', title: d.runTitle }),
+      reset: button(d.reset, () => this.reset(), { title: d.resetTitle }),
     };
 
     const speedSelect = h('select', {
-      'aria-label': 'Tempo beim Ausführen',
+      'aria-label': d.speedLabel,
       onchange: (ev: Event) => { this.speedIndex = Number((ev.target as HTMLSelectElement).value); this.persistSettings(); },
-    }, ...SPEEDS.map((s, i) => h('option', { value: String(i), selected: i === this.speedIndex }, s.label)));
+    }, ...SPEEDS.map((s, i) => h('option', { value: String(i), selected: i === this.speedIndex }, speedLabel(s))));
 
     const limitInput = h('input', {
       type: 'number', min: '1', max: '600', value: String(this.limitSeconds), class: 'limit-input',
-      'aria-label': 'Abbruchschranke in Sekunden',
+      'aria-label': d.limitLabel,
       onchange: (ev: Event) => {
         const input = ev.target as HTMLInputElement;
         const v = Number(input.value);
@@ -126,60 +178,74 @@ export class App {
       },
     });
 
-    this.themeBtn = button('', () => this.cycleTheme(), { class: 'subtle', title: 'Farbschema wechseln' });
+    const themeSwitch = (cls: string, label?: string): HTMLButtonElement => {
+      const sw = h('button', {
+        type: 'button', role: 'switch', class: `theme-switch ${cls}`, title: d.darkModeTitle, 'aria-label': d.darkMode,
+        onclick: () => this.toggleTheme(),
+      }, label ? h('span', {}, label) : null, h('span', { class: 'switch-track', 'aria-hidden': 'true' }, h('span', { class: 'switch-knob' })));
+      this.themeSwitches.push(sw);
+      return sw;
+    };
 
     const header = h('header', { class: 'app-header' },
       h('div', { class: 'title-row' },
-        h('h1', {}, 'Minimaschine'),
+        h('h1', {}, d.appTitle),
         h('div', { class: 'view-settings' },
-          h('label', { class: 'check', title: 'Zeigt Werte zusätzlich hexadezimal/binär und den Opcode im Befehlsregister' },
-            h('input', { type: 'checkbox', checked: this.detailed, onchange: (ev: Event) => { this.detailed = (ev.target as HTMLInputElement).checked; this.persistSettings(); this.render(); } }),
-            'Detailansicht'),
-          h('label', { class: 'check', title: 'Werte im Schaubild wandern sichtbar über die Busse' },
-            h('input', { type: 'checkbox', checked: this.animations, onchange: (ev: Event) => { this.animations = (ev.target as HTMLInputElement).checked; this.persistSettings(); } }),
-            'Animationen'),
-          h('label', { class: 'check', title: 'Stackpointer (SP), Stackbefehle (JSR, RTS, PUSH, POP, RSV, REL) und Adressierung relativ zum SP' },
-            h('input', { type: 'checkbox', checked: this.extended, class: 'extended-box', onchange: (ev: Event) => this.setExtended((ev.target as HTMLInputElement).checked) }),
-            'Erweiterter Modus'),
-          button('Beamer', () => this.toggleBeamer(), { class: 'subtle', title: 'Große Schrift für die Projektion' }),
-          this.themeBtn)),
-      h('nav', { class: 'toolbar', 'aria-label': 'Programm ausführen' },
+          menu(d.options, { class: 'subtle', title: d.optionsTitle, align: 'right' },
+            h('label', { class: 'check', title: d.detailedTitle },
+              h('input', { type: 'checkbox', checked: this.detailed, onchange: (ev: Event) => { this.detailed = (ev.target as HTMLInputElement).checked; this.persistSettings(); this.render(); } }),
+              d.detailed),
+            h('label', { class: 'check', title: d.animationsTitle },
+              h('input', { type: 'checkbox', checked: this.animations, onchange: (ev: Event) => { this.animations = (ev.target as HTMLInputElement).checked; this.persistSettings(); } }),
+              d.animations),
+            h('label', { class: 'check', title: d.extendedTitle },
+              h('input', { type: 'checkbox', checked: this.extended, class: 'extended-box', onchange: (ev: Event) => this.setExtended((ev.target as HTMLInputElement).checked) }),
+              d.extended),
+            // phones: the colour scheme is in this menu, on wider screens it has its own button
+            themeSwitch('phone-only', d.darkMode)).element,
+          button(d.beamer, () => this.toggleBeamer(), { class: 'subtle wide-only', title: d.beamerTitle }),
+          themeSwitch('wide-only'),
+          h('button', { type: 'button', class: 'subtle lang-btn', title: d.langSwitchTitle, 'aria-label': d.langSwitchTitle,
+            onclick: () => this.switchLanguage() }, flagIcon(this.language === 'de' ? 'en' : 'de')))),
+      h('nav', { class: 'toolbar', 'aria-label': d.toolbarLabel },
         h('div', { class: 'btn-group' }, this.btn.stepBack, this.btn.step, this.btn.micro, this.btn.run, this.btn.reset),
-        h('label', { class: 'field', title: 'Wie schnell „Ausführen“ die Befehle abarbeitet' }, 'Tempo', speedSelect),
-        h('label', { class: 'field', title: 'Bei Tempo „Maximal“ wird das Programm nach dieser Zeit angehalten (Schutz vor Endlosschleifen).' },
-          'Abbruch nach', limitInput, 's')));
+        h('div', { class: 'run-settings' },
+          h('label', { class: 'field', title: d.speedTitle }, d.speed, speedSelect),
+          h('label', { class: 'field', title: d.limitTitle },
+            d.limit, limitInput, 's'))));
 
     this.statusEl = h('div', { class: 'status', role: 'status', 'aria-live': 'polite' });
 
     // ----- editor panel -----
     const editorHost = h('div', { class: 'editor-host' });
     this.fileNameEl = h('span', { class: 'file-name' });
-    const exampleSelect = h('select', {
-      'aria-label': 'Beispielprogramm laden',
-      onchange: (ev: Event) => {
-        const select = ev.target as HTMLSelectElement;
-        this.loadExample(select.value);
-        select.value = '';
-      },
-    }, h('option', { value: '' }, 'Beispiel laden …'),
-    ...EXAMPLES.map((e) => h('option', { value: e.id, title: e.description }, e.title)));
+    const fileMenu = menu(d.fileMenu, { class: 'small', title: d.fileMenuTitle },
+      button(d.open, () => void this.openProgram(), { key: k.open, title: d.openTitle }),
+      button(d.save, () => void this.saveProgram(), { key: k.save, title: d.saveTitle }),
+      button(d.share, () => void this.shareProgram(), { title: d.shareTitle }),
+      menuHeading(d.loadExampleLabel),
+      ...getExamples(this.language).map((e) => button(e.title, () => this.loadExample(e.id), { title: e.description }))).element;
     const fileBar = h('div', { class: 'file-bar' },
-      exampleSelect,
-      button('Öffnen', () => void this.openProgram(), { class: 'small', title: 'Programmdatei öffnen – Tastenkürzel: Strg+O' }),
-      button('Speichern', () => void this.saveProgram(), { class: 'small', title: 'Programm als Datei speichern – Tastenkürzel: Strg+S' }),
-      button('Link teilen', () => void this.shareProgram(), { class: 'small', title: 'Link erzeugen, der das Programm enthält – es wird nichts auf einem Server gespeichert' }),
+      fileMenu,
+      this.copyButton(d.copyCodeTitle, () => this.copyCode()),
       this.fileNameEl);
-    this.errorList = h('ul', { class: 'error-list', hidden: true, 'aria-label': 'Fehler im Programm' });
+    this.errorList = h('ul', { class: 'error-list', hidden: true, 'aria-label': d.errorsLabel });
+    this.maxButtons = {
+      editor: h('button', { type: 'button', class: 'small icon-btn max-btn', onclick: () => this.toggleMaximized('editor') }),
+      machine: h('button', { type: 'button', class: 'small icon-btn max-btn', onclick: () => this.toggleMaximized('machine') }),
+    };
     const editorPanel = h('section', { class: 'panel panel-editor', 'aria-labelledby': 'h-editor' },
       h('div', { class: 'panel-head' },
-        h('h2', { id: 'h-editor' }, 'Programm'),
-        h('div', { class: 'btn-group' },
-          button('Assemblieren', () => this.assemble(false), { key: KEYS.assemble, class: 'primary', title: 'Programm übersetzen und in den (vorher gelöschten) Speicher laden' }),
-          button('… und Speicher behalten', () => this.assemble(true), { key: KEYS.assembleKeep, title: 'Programm übersetzen, ohne den übrigen Speicher zu löschen' }))),
+        h('h2', { id: 'h-editor' }, d.program),
+        h('div', { class: 'head-actions' },
+          h('div', { class: 'btn-group' },
+            button(d.assemble, () => this.assemble(false), { key: k.assemble, class: 'primary', title: d.assembleTitle }),
+            button(d.assembleKeep, () => this.assemble(true), { key: k.assembleKeep, title: d.assembleKeepTitle })),
+          this.maxButtons.editor)),
       fileBar,
       editorHost,
       this.errorList,
-      h('p', { class: 'hint' }, 'Tipp: Klick auf eine Zeilennummer setzt einen Haltepunkt. Zeig mit der Maus auf einen Befehl, um eine Hilfe zu sehen.'));
+      h('p', { class: 'hint' }, d.editorHint));
 
     // ----- machine panel -----
     this.explanationEl = h('div', { class: 'explanation', 'aria-live': 'polite' });
@@ -189,33 +255,37 @@ export class App {
     };
     const tab = (id: 'diagram' | 'registers', label: string) =>
       h('button', { type: 'button', role: 'tab', class: 'tab', 'aria-controls': `pane-${id}`, onclick: () => this.setMachineTab(id) }, label);
-    this.tabButtons = { diagram: tab('diagram', 'Schaubild'), registers: tab('registers', 'Register') };
+    this.tabButtons = { diagram: tab('diagram', d.diagramTab), registers: tab('registers', d.registersTab) };
     const machinePanel = h('section', { class: 'panel panel-machine', 'aria-labelledby': 'h-machine' },
       h('div', { class: 'panel-head' },
-        h('h2', { id: 'h-machine' }, 'Maschine'),
-        h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Ansicht der Maschine' }, this.tabButtons.diagram, this.tabButtons.registers)),
+        h('h2', { id: 'h-machine' }, d.machine),
+        h('div', { class: 'head-actions' },
+          h('div', { class: 'tabs', role: 'tablist', 'aria-label': d.machineViewLabel }, this.tabButtons.diagram, this.tabButtons.registers),
+          this.maxButtons.machine)),
       this.tabPanes.diagram, this.tabPanes.registers);
 
     // ----- memory panel -----
-    this.spButton = button('Zum SP', () => this.memory.scrollToAddress(this.session.state.sp, true),
-      { class: 'small', title: 'Zur Zelle springen, auf die der Stackpointer zeigt' });
+    this.spButton = button(d.toSp, () => this.memory.scrollToAddress(this.session.state.sp, true),
+      { class: 'small', title: d.toSpTitle });
     this.spButton.hidden = true;
     this.memory = new MemoryView((address, value) => {
       this.session.writeMemory(address, value);
-      this.setStatus(`Adresse ${address} geändert. („Schritt zurück“ ist danach erst wieder nach dem nächsten Schritt möglich.)`, 'info');
+      this.setStatus(t().memoryEdited(address), 'info', true);
       this.render();
     });
     const formatNames: Record<MemoryFormat, string> = {
-      signed: 'mit Vorzeichen', unsigned: 'ohne Vorzeichen', hex: 'hexadezimal', opcodes: 'als Befehle',
+      signed: d.formatSigned, unsigned: d.formatUnsigned, hex: d.formatHex, opcodes: d.formatOpcodes,
     };
-    const formatGroup = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': 'Darstellung der Speicherinhalte' },
-      ...(Object.keys(formatNames) as MemoryFormat[]).map((f) =>
-        h('label', {},
-          h('input', { type: 'radio', name: 'mem-format', value: f, checked: f === this.format,
-            onchange: () => { this.format = f; this.persistSettings(); this.render(); } }),
-          h('span', {}, formatNames[f]))));
+    // Phones: the display format is a drop-down that shows the current choice.
+    const formatMenu = menu(formatNames[this.format], { class: 'small', title: d.memoryFormatLabel, align: 'right', phoneOnly: true },
+      h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': d.memoryFormatLabel },
+        ...(Object.keys(formatNames) as MemoryFormat[]).map((f) =>
+          h('label', {},
+            h('input', { type: 'radio', name: 'mem-format', value: f, checked: f === this.format,
+              onchange: () => { this.format = f; formatMenu.setLabel(formatNames[f]); this.persistSettings(); this.render(); } }),
+            h('span', {}, formatNames[f])))));
     const gotoInput = h('input', {
-      class: 'goto-input', placeholder: 'Adresse', 'aria-label': 'Gehe zu Adresse',
+      class: 'goto-input', placeholder: d.goToPlaceholder, 'aria-label': d.goToLabel,
       onkeydown: (ev: KeyboardEvent) => {
         ev.stopPropagation();
         if (ev.key !== 'Enter') return;
@@ -229,7 +299,7 @@ export class App {
           followBox.checked = false;
           this.memory.scrollToAddress(target, true);
         } else {
-          this.setStatus(`„${text}“ ist keine Adresse (0 bis 65535, 0x… oder eine Marke).`, 'error');
+          this.setStatus(t().notAnAddress(text), 'error');
         }
       },
     });
@@ -237,36 +307,66 @@ export class App {
       onchange: (ev: Event) => { this.followPc = (ev.target as HTMLInputElement).checked; this.persistSettings(); this.render(); } });
     const memoryPanel = h('section', { class: 'panel panel-memory', 'aria-labelledby': 'h-memory' },
       h('div', { class: 'panel-head' },
-        h('h2', { id: 'h-memory' }, 'Speicher'),
-        formatGroup),
+        h('h2', { id: 'h-memory' }, d.memory),
+        formatMenu.element),
       h('div', { class: 'mem-tools' },
-        h('label', { class: 'check' }, followBox, 'dem PC folgen'),
-        button('Zum PC', () => this.memory.scrollToAddress(this.session.state.pc, true), { class: 'small' }),
-        this.spButton,
-        button('Zum Adressteil', () => this.memory.scrollToAddress(this.session.state.ir.address, true),
-          { class: 'small', title: 'Zur Adresse aus dem Befehlsregister springen' }),
-        h('label', { class: 'field' }, 'Gehe zu', gotoInput),
-        h('label', { class: 'check' },
-          h('input', { type: 'checkbox', checked: this.hexAddresses, onchange: (ev: Event) => { this.hexAddresses = (ev.target as HTMLInputElement).checked; this.persistSettings(); this.render(); } }),
-          'Adressen hexadezimal')),
+        // Phones: navigation and address display in a drop-down; "go to" and copy stay visible.
+        menu(d.memoryView, { class: 'small', title: d.memoryViewTitle, phoneOnly: true },
+          h('label', { class: 'check' }, followBox, d.followPc),
+          button(d.toPc, () => this.memory.scrollToAddress(this.session.state.pc, true), { class: 'small' }),
+          this.spButton,
+          button(d.toAddressPart, () => this.memory.scrollToAddress(this.session.state.ir.address, true),
+            { class: 'small', title: d.toAddressPartTitle }),
+          h('label', { class: 'check' },
+            h('input', { type: 'checkbox', checked: this.hexAddresses, onchange: (ev: Event) => { this.hexAddresses = (ev.target as HTMLInputElement).checked; this.persistSettings(); this.render(); } }),
+            d.hexAddresses)).element,
+        h('label', { class: 'field' }, d.goTo, gotoInput),
+        this.copyButton(d.copyMemoryTitle, () => this.copyMemory())),
       this.memory.element);
 
-    setChildren(root, header, this.statusEl,
-      h('main', { class: 'app-main' }, editorPanel, machinePanel, memoryPanel));
+    const splitter = h('div', {
+      class: 'splitter', role: 'separator', tabindex: '0', 'aria-orientation': 'vertical',
+      'aria-label': d.splitterLabel, title: d.splitterTitle,
+      onpointerdown: (ev: PointerEvent) => this.startSplitDrag(ev, splitter),
+      ondblclick: () => this.setSplit(50),
+      onkeydown: (ev: KeyboardEvent) => {
+        if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
+          ev.preventDefault();
+          ev.stopPropagation();
+          this.setSplit(this.splitPercent + (ev.key === 'ArrowLeft' ? -5 : 5));
+        }
+      },
+    });
+    this.mainEl = h('main', { class: 'app-main' }, editorPanel, splitter, machinePanel, memoryPanel);
+    setChildren(root, header, this.statusEl, this.mainEl);
+    this.setSplit(this.splitPercent, false);
+    this.updateMaximized();
 
     // ----- editor (needs its host element in the page) -----
-    const autosaved = loadSource();
-    if (autosaved === null) this.savedText = DEFAULT_PROGRAM;
-    this.editor = createEditor(editorHost, autosaved ?? DEFAULT_PROGRAM, {
+    const autosaved = carry ? carry.text : loadSource();
+    if (autosaved === null) this.savedText = defaultProgram(this.language);
+    this.editor = createEditor(editorHost, autosaved ?? defaultProgram(this.language), {
       onChange: () => this.onSourceChanged(),
       onBreakpointsChange: (lines) => this.session.setBreakpointLines(lines),
     });
+    if (carry) {
+      this.editor.setBreakpointLines(carry.breakpoints);
+      // Show the error list again, now in the new language (the machine stays unchanged).
+      if (carry.hadErrors) {
+        const errors = assembleSource(carry.text, { extended: this.extended, lang: this.language }).errors;
+        this.editor.setErrors(errors);
+        this.showErrors(errors);
+      }
+    }
 
-    document.addEventListener('keydown', (ev) => this.onKey(ev));
+    const signal = this.listeners.signal;
+    document.addEventListener('keydown', (ev) => this.onKey(ev), { signal });
     // Save immediately when the page is closed or hidden (the timer might not run anymore).
-    window.addEventListener('pagehide', () => this.autosaveNow());
-    document.addEventListener('visibilitychange', () => { if (document.hidden) this.autosaveNow(); });
-    window.addEventListener('hashchange', () => void this.loadFromHash());
+    window.addEventListener('pagehide', () => this.autosaveNow(), { signal });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.autosaveNow(); }, { signal });
+    window.addEventListener('hashchange', () => void this.loadFromHash(), { signal });
+    // In "auto" the switch follows a change of the system setting.
+    window.matchMedia(DARK_QUERY).addEventListener('change', () => this.applyTheme(), { signal });
 
     this.applyTheme();
     document.documentElement.classList.toggle('beamer', this.beamer);
@@ -274,11 +374,101 @@ export class App {
     this.spButton.hidden = !this.extended;
     this.updateFileName();
     this.setMachineTab(this.machineTab);
-    this.setStatus(autosaved === null
-      ? 'Willkommen! Drücke „Assemblieren“, um das Beispielprogramm in den Speicher zu laden.'
-      : 'Willkommen zurück! Dein letztes Programm wurde wiederhergestellt.', 'info');
+    if (carry) {
+      this.setStatus(d.languageChanged, 'info', true);
+      this.render();
+      window.scrollTo(0, carry.scrollY);
+      return;
+    }
+    this.setStatus(autosaved === null ? d.welcome : d.welcomeBack, 'info', true);
     this.render();
     void this.loadFromHash();
+  }
+
+  /** Switches between German and English by rebuilding the page; the machine and the program stay. */
+  private switchLanguage(): void {
+    this.stopRun();
+    this.leaveMicroView();
+    this.autosaveNow();
+    this.language = this.language === 'de' ? 'en' : 'de';
+    this.persistSettings();
+    const carry: AppCarry = {
+      session: this.session,
+      text: this.editor.getText(),
+      breakpoints: this.editor.getBreakpointLines(),
+      fileName: this.fileName,
+      saveTarget: this.saveTarget,
+      savedText: this.savedText,
+      programStale: this.programStale,
+      hadErrors: !this.errorList.hidden,
+      scrollY: window.scrollY,
+      machineTab: this.machineTab,
+      maximized: this.maximized,
+    };
+    window.clearTimeout(this.statusTimer);
+    this.listeners.abort();
+    this.editor.destroy();
+    new App(this.root, carry);
+  }
+
+  // ==================================================================
+  // Copying
+  // ==================================================================
+
+  /** Small button with the copy symbol; shows a check mark for a moment after copying. */
+  private copyButton(title: string, copy: () => Promise<boolean>): HTMLButtonElement {
+    const btn: HTMLButtonElement = h('button', {
+      type: 'button', class: 'small icon-btn', title, 'aria-label': title,
+      onclick: async () => {
+        if (!(await copy())) return;
+        btn.replaceChildren(checkIcon());
+        window.setTimeout(() => btn.replaceChildren(copyIcon()), 1500);
+      },
+    }, copyIcon());
+    return btn;
+  }
+
+  /** Copies text to the clipboard; falls back to the old copy command. Returns true on success. */
+  private async copyText(text: string, success: string): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(text);
+      this.setStatus(success, 'success', true);
+      return true;
+    } catch {
+      // Clipboard API not allowed: try a hidden text field.
+    }
+    const area = h('textarea', { class: 'copy-buffer', readonly: true });
+    area.value = text;
+    document.body.append(area);
+    area.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      ok = false;
+    }
+    area.remove();
+    this.setStatus(ok ? success : t().copyFailed, ok ? 'success' : 'error', ok);
+    return ok;
+  }
+
+  private copyCode(): Promise<boolean> {
+    const text = this.editor.getText();
+    const lines = text.replace(/\n+$/, '').split('\n').length;
+    return this.copyText(text, t().codeCopied(text.trim() === '' ? 0 : lines));
+  }
+
+  /** Copies the memory up to the last used cell, as displayed (format, hex addresses). */
+  private async copyMemory(): Promise<boolean> {
+    const st = this.session.state;
+    const d = t();
+    const table = memoryAsTable(st.memory, this.format, this.hexAddresses, this.extended ? st.sp : null,
+      { address: d.addressColumn, stack: d.stackSection });
+    if (!table) {
+      this.setStatus(d.memoryEmpty, 'info', true);
+      return false;
+    }
+    return this.copyText(table.text, d.memoryCopied(table.last, table.stack));
   }
 
   // ==================================================================
@@ -286,9 +476,9 @@ export class App {
   // ==================================================================
 
   /** Asks before replacing a program that was changed since the last save. */
-  private confirmReplace(question = 'Dein aktuelles Programm wurde nicht gespeichert und wird ersetzt. Trotzdem fortfahren?'): boolean {
+  private confirmReplace(question = t().confirmReplace): boolean {
     const text = this.editor.getText();
-    const unchanged = text.trim() === '' || text === this.savedText || EXAMPLES.some((e) => e.source === text);
+    const unchanged = text.trim() === '' || text === this.savedText || isExampleSource(text);
     return unchanged || window.confirm(question);
   }
 
@@ -309,11 +499,11 @@ export class App {
   }
 
   private loadExample(id: string): void {
-    const example = EXAMPLES.find((e) => e.id === id);
+    const example = getExamples(this.language).find((e) => e.id === id);
     if (!example || !this.confirmReplace()) return;
     if (example.extended && !this.extended) this.setExtended(true, true);
     this.replaceProgram(example.source, null);
-    this.setStatus(`Beispiel „${example.title}“ geladen: ${example.description}. Jetzt assemblieren (${KEYS.assemble}).`, 'success');
+    this.setStatus(t().exampleLoaded(example.title, example.description, keys().assemble), 'success');
   }
 
   private async openProgram(): Promise<void> {
@@ -322,43 +512,38 @@ export class App {
       const file = await openFile();
       if (!file) return;
       this.replaceProgram(file.text, file.name, file.target);
-      this.setStatus(`„${file.name}“ geöffnet. Jetzt assemblieren (${KEYS.assemble}).`, 'success');
+      this.setStatus(t().fileOpened(file.name, keys().assemble), 'success');
     } catch (e) {
-      this.setStatus(`Die Datei konnte nicht geöffnet werden. (${e instanceof Error ? e.message : String(e)})`, 'error');
+      this.setStatus(t().fileOpenFailed(e instanceof Error ? e.message : String(e)), 'error');
     }
   }
 
   private async saveProgram(): Promise<void> {
     const text = this.editor.getText();
     try {
-      const result = await saveFile(text, this.fileName ?? 'programm', this.saveTarget);
+      const result = await saveFile(text, this.fileName ?? (this.language === 'de' ? 'programm' : 'program'), this.saveTarget);
       if (!result) return;
       this.fileName = result.name;
       this.saveTarget = result.target;
       this.savedText = text;
       saveFileName(result.name);
       this.updateFileName();
-      this.setStatus(result.downloaded
-        ? `Als „${result.name}“ heruntergeladen – du findest die Datei im Download-Ordner.`
-        : `Gespeichert in „${result.name}“.`, 'success');
+      this.setStatus(result.downloaded ? t().fileDownloaded(result.name) : t().fileSaved(result.name), 'success', !result.downloaded);
     } catch (e) {
-      this.setStatus(`Speichern hat nicht geklappt. (${e instanceof Error ? e.message : String(e)})`, 'error');
+      this.setStatus(t().fileSaveFailed(e instanceof Error ? e.message : String(e)), 'error');
     }
   }
 
   private async shareProgram(): Promise<void> {
     const fragment = await encodeShare({ source: this.editor.getText(), extended: this.extended });
     const url = `${location.href.split('#')[0]}#${fragment}`;
-    const longHint = url.length > 2000
-      ? ` Achtung: Der Link ist sehr lang (${url.length} Zeichen) – manche Messenger kürzen so lange Links.`
-      : '';
+    const longHint = url.length > 2000 ? t().linkLong(url.length) : '';
     try {
       await navigator.clipboard.writeText(url);
-      this.setStatus('Link kopiert! Wer ihn öffnet, sieht genau dieses Programm. Das Programm steckt im Link selbst – '
-        + `es wird nichts auf einem Server gespeichert.${longHint}`, 'success');
+      this.setStatus(t().linkCopied + longHint, 'success', longHint === '');
     } catch {
       // Clipboard not allowed (e.g. old browser): show the link to copy by hand.
-      window.prompt('Diesen Link kopieren und weitergeben:', url);
+      window.prompt(t().linkPrompt, url);
     }
   }
 
@@ -371,14 +556,14 @@ export class App {
       history.replaceState(null, '', location.pathname + location.search);
       if (!shared) return;
       if (shared.source !== this.editor.getText()
-        && !this.confirmReplace('Der Link enthält ein Programm. Soll es dein aktuelles (nicht gespeichertes) Programm ersetzen?')) {
+        && !this.confirmReplace(t().confirmReplaceLink)) {
         return;
       }
       if (shared.extended && !this.extended) this.setExtended(true, true);
       this.replaceProgram(shared.source, null);
-      this.setStatus(`Programm aus dem Link geladen. Jetzt assemblieren (${KEYS.assemble}).`, 'success');
+      this.setStatus(t().linkLoaded(keys().assemble), 'success');
     } catch {
-      this.setStatus('Der Link ist unvollständig oder beschädigt – das Programm konnte nicht gelesen werden.', 'error');
+      this.setStatus(t().linkBroken, 'error');
     }
   }
 
@@ -388,7 +573,7 @@ export class App {
   }
 
   private updateFileName(): void {
-    this.fileNameEl.textContent = this.fileName ? `Datei: ${this.fileName}` : '';
+    this.fileNameEl.textContent = this.fileName ? t().fileName(this.fileName) : '';
   }
 
   /** Takes over the saved settings, checking every value. */
@@ -408,6 +593,12 @@ export class App {
     if (theme === 'auto' || theme === 'light' || theme === 'dark') this.theme = theme;
     const format = saved['format'];
     if (format === 'signed' || format === 'unsigned' || format === 'hex' || format === 'opcodes') this.format = format;
+    const before = saved['themeBeforeBeamer'];
+    if (before === 'auto' || before === 'light' || before === 'dark') this.themeBeforeBeamer = before;
+    const split = saved['splitPercent'];
+    if (typeof split === 'number' && split >= 20 && split <= 80) this.splitPercent = split;
+    const language = saved['language'];
+    if (language === 'de' || language === 'en') this.language = language;
   }
 
   private persistSettings(): void {
@@ -422,6 +613,9 @@ export class App {
       limitSeconds: this.limitSeconds,
       theme: this.theme,
       format: this.format,
+      themeBeforeBeamer: this.themeBeforeBeamer,
+      language: this.language,
+      splitPercent: this.splitPercent,
     });
   }
 
@@ -446,15 +640,13 @@ export class App {
     if (result.ok) {
       this.programStale = false;
       if (result.size === 0) {
-        this.setStatus('Das Programm ist leer – es gibt nichts zu übersetzen.', 'warning');
+        this.setStatus(t().emptyProgram, 'warning');
       } else {
-        this.setStatus(`Assembliert: Speicherzellen 0 bis ${result.size - 1} belegt${keepMemory ? ', übriger Speicher behalten' : ''}. `
-          + `Weiter mit „Schritt“ (${KEYS.step}) oder „Ausführen“ (${KEYS.run}).`, 'success');
+        this.setStatus(t().assembled(result.size - 1, keepMemory, keys().step, keys().run), 'success');
       }
       this.memory.scrollToAddress(0, true);
     } else {
-      const n = result.errors.length;
-      this.setStatus(`${n} Fehler gefunden – siehe Liste unter dem Programm. Die Maschine wurde nicht verändert.`, 'error');
+      this.setStatus(t().errorsFound(result.errors.length), 'error');
     }
     this.render();
   }
@@ -469,7 +661,10 @@ export class App {
     const text = disassembleAt(st.memory, this.session.instructionAddress, (a) => this.session.labelAt(a)).text;
     const reason = this.session.step();
     if (reason !== 'none') this.reportStop(reason);
-    else this.setStatus(`${wasMicro ? 'Fertig ausgeführt' : 'Ausgeführt'}: ${text}${line !== undefined && !this.programStale ? ` (Zeile ${line})` : ''}`, 'info');
+    else {
+      const shownLine = this.programStale ? undefined : line;
+      this.setStatus(wasMicro ? t().finished(text, shownLine) : t().executed(text, shownLine), 'info', true);
+    }
     this.render();
   }
 
@@ -479,9 +674,9 @@ export class App {
     const wasMicro = this.session.state.micro !== null;
     if (this.session.stepBack()) {
       const nowMicro = this.session.state.micro !== null;
-      this.setStatus(wasMicro || nowMicro ? 'Einen Mikroschritt zurückgegangen.' : 'Einen Befehl zurückgegangen.', 'info');
+      this.setStatus(wasMicro || nowMicro ? t().backMicro : t().backStep, 'info', true);
     } else {
-      this.setStatus('Weiter zurück geht es nicht.', 'info');
+      this.setStatus(t().backNone, 'info', true);
     }
     this.render();
   }
@@ -506,7 +701,7 @@ export class App {
     this.setMachineTab('diagram');
     this.renderExplanation();
     if (this.session.state.halted !== 'none') this.reportStop(this.session.state.halted);
-    else this.setStatus(`Mikroschritt ${event.index + 1} von ${event.count}: ${event.title}${event.done ? ' – Befehl fertig.' : ''}`, 'info');
+    else this.setStatus(t().microStatus(event.index + 1, event.count, event.title, event.done), 'info', true);
     this.btn.micro.classList.add('is-busy');
     await this.diagram.play(event, this.animations);
     // A newer micro step (or another action) took over: it will redraw.
@@ -519,14 +714,14 @@ export class App {
     this.stopRun();
     this.leaveMicroView();
     this.session.reset();
-    this.setStatus('Zurückgesetzt: Akku, Befehlszähler und Flags sind 0. Der Speicher ist unverändert.', 'info');
+    this.setStatus(t().resetDone, 'info', true);
     this.render();
   }
 
   private toggleRun(): void {
     if (this.running) {
       this.stopRun();
-      this.setStatus('Pause. Weiter mit „Ausführen“ oder „Schritt“.', 'info');
+      this.setStatus(t().paused, 'info', true);
       this.render();
       return;
     }
@@ -537,7 +732,7 @@ export class App {
     this.runStart = performance.now();
     this.lastFrame = this.runStart;
     this.stepCarry = 1; // execute the first instruction right away
-    this.setStatus('Programm läuft …', 'info');
+    this.setStatus(t().running, 'info');
     this.render();
     requestAnimationFrame((t) => this.tick(t));
   }
@@ -545,7 +740,7 @@ export class App {
   /** One animation frame of a program run. */
   private tick(now: number): void {
     if (!this.running) return;
-    const speed = SPEEDS[this.speedIndex]?.perSecond ?? 10;
+    const speed = SPEEDS[this.speedIndex] ?? 10;
     let result: { reason: StopReason; steps: number } = { reason: 'none', steps: 0 };
 
     if (speed === Infinity) {
@@ -557,8 +752,7 @@ export class App {
       } while (result.reason === 'none' && performance.now() < end);
       if (result.reason === 'none' && now - this.runStart > this.limitSeconds * 1000) {
         this.stopRun();
-        this.setStatus(`Abbruchschranke erreicht: Das Programm lief länger als ${this.limitSeconds} s und wurde angehalten. `
-          + 'Vielleicht eine Endlosschleife? Mit „Ausführen“ geht es weiter.', 'warning');
+        this.setStatus(t().limitReached(this.limitSeconds), 'warning');
         this.render();
         return;
       }
@@ -588,11 +782,11 @@ export class App {
   /** Checks that a program was assembled and the machine is not halted. */
   private checkReady(): boolean {
     if (!this.session.program) {
-      this.setStatus(`Bitte zuerst „Assemblieren“ (${KEYS.assemble}), damit das Programm im Speicher steht.`, 'warning');
+      this.setStatus(t().assembleFirst(keys().assemble), 'warning');
       return false;
     }
     if (this.session.state.halted !== 'none') {
-      this.setStatus('Die Maschine ist angehalten. Mit „Zurücksetzen“ beginnt das Programm von vorn – oder geh mit „Schritt zurück“.', 'info');
+      this.setStatus(t().machineHalted, 'info');
       return false;
     }
     return true;
@@ -602,20 +796,19 @@ export class App {
     const st = this.session.state;
     switch (reason) {
       case 'halt':
-        this.setStatus('Programm beendet (HALT).', 'success');
+        this.setStatus(t().stopHalt, 'success');
         break;
       case 'reset':
-        this.setStatus('Das Programm hat RESET ausgeführt: Akku, Befehlszähler und Flags sind 0, die Maschine ist angehalten. Der Speicher bleibt erhalten.', 'info');
+        this.setStatus(t().stopReset, 'info');
         break;
       case 'illegalOpcode':
-        this.setStatus(`An Adresse ${st.pc} steht kein gültiger Befehl (Wert ${st.memory[st.pc]}). `
-          + 'Läuft das Programm vielleicht in den Datenbereich, weil ein HALT fehlt?', 'error');
+        this.setStatus(t().stopIllegal(st.pc, st.memory[st.pc] ?? 0), 'error');
         break;
       case 'divisionByZero':
-        this.setStatus(`Division durch 0 bei Adresse ${st.pc} (${disassembleAt(st.memory, st.pc).text}) – Programm angehalten.`, 'error');
+        this.setStatus(t().stopDivZero(st.pc, disassembleAt(st.memory, st.pc).text), 'error');
         break;
       case 'breakpoint':
-        this.setStatus(`Haltepunkt in Zeile ${this.session.currentLine ?? '?'} erreicht. Weiter mit „Ausführen“ oder „Schritt“.`, 'info');
+        this.setStatus(t().stopBreakpoint(String(this.session.currentLine ?? '?')), 'info');
         break;
       case 'none':
         break;
@@ -627,7 +820,7 @@ export class App {
     this.autosaveTimer = window.setTimeout(() => saveSource(this.editor.getText()), 400);
     if (this.session.program && !this.programStale) {
       this.programStale = true;
-      this.setStatus(`Das Programm wurde geändert. Zum Ausführen der neuen Fassung zuerst assemblieren (${KEYS.assemble}).`, 'warning');
+      this.setStatus(t().sourceChanged(keys().assemble), 'warning');
       this.render();
     }
   }
@@ -637,7 +830,7 @@ export class App {
     setChildren(this.errorList, ...errors.map((e) =>
       h('li', {},
         h('button', { type: 'button', class: 'error-item', onclick: () => this.editor.goToLine(e.line) },
-          h('strong', {}, `Zeile ${e.line}: `), e.message, e.hint ? h('span', { class: 'error-hint' }, ` ${e.hint}`) : null))));
+          h('strong', {}, t().lineLabel(e.line)), e.message, e.hint ? h('span', { class: 'error-hint' }, ` ${e.hint}`) : null))));
   }
 
   // ==================================================================
@@ -659,11 +852,9 @@ export class App {
     }
     if (this.session.program) {
       this.programStale = true;
-      this.setStatus(on
-        ? `Erweiterter Modus an: Stackpointer, Stackbefehle und SP-Adressierung sind verfügbar. Bitte neu assemblieren (${KEYS.assemble}).`
-        : `Erweiterter Modus aus. Bitte neu assemblieren (${KEYS.assemble}).`, 'info');
+      this.setStatus((on ? t().extendedOn : t().extendedOff) + t().reassemble(keys().assemble), 'info');
     } else {
-      this.setStatus(on ? 'Erweiterter Modus an: Stackpointer, Stackbefehle und SP-Adressierung sind verfügbar.' : 'Erweiterter Modus aus.', 'info');
+      this.setStatus(on ? t().extendedOn : t().extendedOff, 'info', true);
     }
     this.render();
   }
@@ -679,32 +870,50 @@ export class App {
   /** Text under the diagram: phase of the instruction cycle and what happens. */
   private renderExplanation(): void {
     const ev = this.lastEvent;
-    const phases: Array<[CyclePhase, string]> = [['fetch', 'Holen'], ['decode', 'Dekodieren'], ['execute', 'Ausführen']];
-    const pills = h('ol', { class: 'phases', 'aria-label': 'Befehlszyklus' },
+    const d = t();
+    const phases: Array<[CyclePhase, string]> = [['fetch', d.phaseFetch], ['decode', d.phaseDecode], ['execute', d.phaseExecute]];
+    const pills = h('ol', { class: 'phases', 'aria-label': d.cycleLabel },
       ...phases.map(([phase, label]) => h('li', { class: ev?.phase === phase ? 'current' : '' }, label)));
     if (!ev) {
       setChildren(this.explanationEl, pills,
-        h('p', { class: 'muted' }, `Mit „Mikroschritt“ (${KEYS.microStep}) siehst du, wie ein Befehl in den Phasen `
-          + 'Holen – Dekodieren – Ausführen abgearbeitet wird.'));
+        h('p', { class: 'muted' }, d.microHint(keys().microStep)));
       return;
     }
     setChildren(this.explanationEl, pills,
       h('p', { class: 'explanation-title' },
         h('strong', {}, ev.title),
-        h('span', { class: 'muted' }, ` · Mikroschritt ${ev.index + 1} von ${ev.count}`)),
+        h('span', { class: 'muted' }, d.microOf(ev.index + 1, ev.count))),
       h('p', {}, ev.explanation));
   }
 
+  /** Projector mode: large font and – because projectors show dark colours badly – the light theme. */
   private toggleBeamer(): void {
     this.beamer = !this.beamer;
+    if (this.beamer) {
+      this.themeBeforeBeamer = this.theme;
+      this.theme = 'light';
+    } else if (this.themeBeforeBeamer !== null) {
+      this.theme = this.themeBeforeBeamer;
+      this.themeBeforeBeamer = null;
+    }
+    this.applyTheme();
     document.documentElement.classList.toggle('beamer', this.beamer);
     this.persistSettings();
     this.render();
   }
 
-  private cycleTheme(): void {
-    const order: Theme[] = ['auto', 'light', 'dark'];
-    this.theme = order[(order.indexOf(this.theme) + 1) % order.length] ?? 'auto';
+  /** True if the page is shown dark right now (chosen, or "auto" and the system is dark). */
+  private isDark(): boolean {
+    return this.theme === 'dark' || (this.theme === 'auto' && window.matchMedia(DARK_QUERY).matches);
+  }
+
+  /**
+   * The switch starts in "auto" (follows the system). The first click fixes
+   * the opposite of what is shown; after that it only toggles light/dark.
+   */
+  private toggleTheme(): void {
+    this.theme = this.isDark() ? 'light' : 'dark';
+    this.themeBeforeBeamer = null; // chosen by hand: keep it after the projector mode
     this.applyTheme();
     this.persistSettings();
   }
@@ -713,7 +922,8 @@ export class App {
     const rootEl = document.documentElement;
     if (this.theme === 'auto') delete rootEl.dataset['theme'];
     else rootEl.dataset['theme'] = this.theme;
-    this.themeBtn.replaceChildren(`Farben: ${THEME_LABELS[this.theme]}`);
+    const dark = String(this.isDark());
+    for (const sw of this.themeSwitches) sw.setAttribute('aria-checked', dark);
   }
 
   private onKey(ev: KeyboardEvent): void {
@@ -738,6 +948,8 @@ export class App {
       action();
     } else if (ev.key === 'Escape' && this.running) {
       this.toggleRun();
+    } else if (ev.key === 'Escape' && this.maximized !== 'none') {
+      this.toggleMaximized(this.maximized);
     }
   }
 
@@ -745,7 +957,72 @@ export class App {
   // Rendering
   // ==================================================================
 
-  private setStatus(text: string, kind: StatusKind): void {
+  // ==================================================================
+  // Panel size: maximize, splitter
+  // ==================================================================
+
+  /** Maximizes a panel or makes it small again. On phones the editor then covers the whole screen. */
+  private toggleMaximized(panel: 'editor' | 'machine'): void {
+    this.maximized = this.maximized === panel ? 'none' : panel;
+    this.updateMaximized();
+    if (this.maximized === 'editor') this.editor.focus();
+    this.render();
+  }
+
+  private updateMaximized(): void {
+    const rootEl = document.documentElement;
+    rootEl.classList.toggle('max-editor', this.maximized === 'editor');
+    rootEl.classList.toggle('max-machine', this.maximized === 'machine');
+    const d = t();
+    for (const panel of ['editor', 'machine'] as const) {
+      const on = this.maximized === panel;
+      const title = on ? d.restorePanel : panel === 'editor' ? d.maximizeProgram : d.maximizeMachine;
+      const btn = this.maxButtons[panel];
+      btn.title = title;
+      btn.setAttribute('aria-label', title);
+      btn.setAttribute('aria-pressed', String(on));
+      btn.replaceChildren(on ? restoreIcon() : maximizeIcon());
+    }
+  }
+
+  /** Sets the width of the program panel (percent, 20 … 80). */
+  private setSplit(percent: number, persist = true): void {
+    this.splitPercent = Math.round(Math.min(80, Math.max(20, percent)));
+    this.mainEl.style.setProperty('--split', `${this.splitPercent}%`);
+    this.mainEl.querySelector('.splitter')?.setAttribute('aria-valuenow', String(this.splitPercent));
+    if (persist) this.persistSettings();
+  }
+
+  /** Dragging the bar between program and machine with mouse, pen or finger. */
+  private startSplitDrag(ev: PointerEvent, splitter: HTMLElement): void {
+    ev.preventDefault();
+    splitter.setPointerCapture(ev.pointerId);
+    splitter.classList.add('dragging');
+    const move = (e: PointerEvent) => {
+      const box = this.mainEl.getBoundingClientRect();
+      this.setSplit(((e.clientX - box.left) / box.width) * 100, false);
+    };
+    const end = () => {
+      splitter.classList.remove('dragging');
+      splitter.removeEventListener('pointermove', move);
+      splitter.removeEventListener('pointerup', end);
+      splitter.removeEventListener('pointercancel', end);
+      this.persistSettings();
+    };
+    splitter.addEventListener('pointermove', move);
+    splitter.addEventListener('pointerup', end);
+    splitter.addEventListener('pointercancel', end);
+  }
+
+  /**
+   * Shows a message in the status line.
+   * @param transient true for unimportant messages (confirmations, single
+   *        steps …): they disappear after a few seconds. Errors, warnings and
+   *        messages that tell what to do next stay until the next message.
+   */
+  private setStatus(text: string, kind: StatusKind, transient = false): void {
+    window.clearTimeout(this.statusTimer);
+    if (transient) this.statusTimer = window.setTimeout(() => this.setStatus('', 'info'), TRANSIENT_STATUS_MS);
     this.statusEl.textContent = text;
     this.statusEl.className = `status status-${kind}`;
     this.statusEl.hidden = text === '';
@@ -787,7 +1064,7 @@ export class App {
     this.btn.stepBack.disabled = this.running || !s.canStepBack;
     this.btn.step.disabled = this.running;
     this.btn.micro.disabled = this.running;
-    this.btn.run.firstChild!.textContent = this.running ? '❚❚ Pause' : '▶▶ Ausführen';
+    this.btn.run.firstChild!.textContent = this.running ? t().pause : t().run;
     this.btn.run.classList.toggle('is-running', this.running);
   }
 }

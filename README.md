@@ -48,9 +48,21 @@ Auf dem Mac ggf. zusätzlich die `fn`-Taste drücken.
 ## Speichern, Teilen, Offline
 
 - **Automatisch:** Das Programm und die Einstellungen werden im Browser gespeichert (`localStorage`) und beim nächsten Besuch wiederhergestellt.
-- **Dateien:** „Öffnen“/„Speichern“ arbeiten mit `.mia`-Dateien. In Chrome und Edge wird direkt in die gewählte Datei gespeichert, in Firefox und Safari landet die Datei im Download-Ordner.
+- **Dateien:** „Öffnen“/„Speichern“ (im Menü „Datei“) arbeiten mit `.mia`-Dateien. In Chrome und Edge wird direkt in die gewählte Datei gespeichert, in Firefox und Safari landet die Datei im Download-Ordner.
 - **Teilen:** „Link teilen“ kopiert einen Link, der das Programm (komprimiert) enthält. Das Programm steht hinter dem `#` und wird nie an einen Server geschickt.
 - **Offline:** Nach dem ersten Besuch der veröffentlichten Version funktioniert die App auch ohne Internet (Service Worker). Im Entwicklungsmodus (`npm run dev`) ist das absichtlich abgeschaltet; zum Ausprobieren `npm run build` und dann `npm run preview`.
+
+## Sprache, Kopieren, Beamer
+
+- **Menüs:** „Optionen“ oben rechts enthält Detailansicht, Animationen und erweiterten Modus. „Datei“ über dem Editor enthält Öffnen, Speichern, Link teilen und die Beispielprogramme. Das Kopier-Symbol bleibt direkt daneben sichtbar.
+
+- **Sprache:** Der Flaggen-Knopf oben rechts (zeigt die Sprache, zu der man wechselt) schaltet die ganze Oberfläche um: Fehlermeldungen des Assemblers, Mikroschritt-Erklärungen, Befehlshilfe und Beispielprogramme. Maschine, Programm und Haltepunkte bleiben dabei erhalten. Beim ersten Start gilt die Sprache des Browsers.
+- **Kopieren:** Das Kopier-Symbol über dem Editor kopiert den Programmtext. Das Kopier-Symbol beim Speicher kopiert die Zellen 0 bis zur letzten belegten Zelle als Tabelle (10 Werte pro Zeile, mit Adressspalte, in der gewählten Darstellung). Die Tabelle lässt sich direkt in eine Tabellenkalkulation einfügen. Im erweiterten Modus kommt ein benutzter Stack als eigener Block dazu.
+- **Hell/Dunkel:** Der Schalter oben rechts folgt beim ersten Start der Systemeinstellung. Nach dem ersten Klick wechselt er nur noch zwischen hell und dunkel (gespeichert).
+- **Beamer:** Der Beamer-Modus vergrößert die Schrift und schaltet auf helle Farben. Beim Ausschalten kommt das vorherige Farbschema zurück.
+- **Statuszeile:** Unwichtige Meldungen (Begrüßung, einzelne Schritte, Bestätigungen wie „kopiert“) verschwinden nach 5 Sekunden. Fehler, Warnungen und Hinweise, was als Nächstes zu tun ist (z. B. nach dem Laden eines Beispiels), bleiben stehen.
+- **Smartphone:** Kompakte Kopfleiste (Titel, „Optionen“ mit dem Hell/Dunkel-Schalter, Flagge; kein Beamer-Knopf), Steuerknöpfe in zwei Zeilen, Tempo und Abbruchschranke in einer Zeile. Beim Speicher sind die Darstellung und „Ansicht“ (dem PC folgen, Zum PC/SP/Adressteil, Adressen hexadezimal) Aufklappmenüs; „Gehe zu“ und Kopieren bleiben sichtbar. Schmale Zeilennummern im Editor; unter „Maschine“ ist zuerst der Reiter „Register“ offen. Der Vergrößern-Knopf beim Programm zeigt nur noch das Eingabefeld über den ganzen Bildschirm, mit einem Knopf zum Verkleinern.
+- **Größe der Bereiche (Laptop):** Der Balken zwischen Programm und Maschine lässt sich ziehen (auch mit den Pfeiltasten; Doppelklick = halb und halb). Die Breite wird gespeichert. Der Vergrößern-Knopf oben rechts in „Programm“ bzw. „Maschine“ lässt diesen Bereich das ganze Fenster unter der Steuerleiste füllen: Der Editor zeigt dann mehr Code bei gleicher Schrift, das Schaubild wird größer. Zurück mit demselben Knopf oder Esc.
 
 ## Projektstruktur
 
@@ -67,6 +79,7 @@ src/
     disassembler.ts Speicher → Befehlstext
     format.ts       Zahlendarstellung (signed/unsigned/hex/binär)
     microcode.ts    Mikroschritte: Holen – Dekodieren – Ausführen mit Erklärtexten
+    lang.ts         Sprachtyp (de/en) für die zweisprachigen Texte im Core
     index.ts        Öffentliche API des Cores
   ui/               Oberfläche (nutzt nur src/core/index.ts)
     app.ts          Aufbau der Seite, Knöpfe, Tastenkürzel, Programmlauf
@@ -75,8 +88,12 @@ src/
     machineView.ts  Anzeige der Register und Flags (Reiter „Register“)
     diagramView.ts  SVG-Schaubild mit Animation (Reiter „Schaubild“)
     memoryView.ts   Speichertabelle (nur sichtbare Zeilen werden gezeichnet)
-    examples.ts     Beispielprogramme (jedes wird in tests/examples.test.ts ausgeführt)
-    dom.ts, texts.ts  Hilfsfunktionen, Texte
+    memoryTable.ts  Zelltext und Speicher als Tabelle zum Kopieren – getestet
+    examples.ts     Beispielprogramme auf Deutsch und Englisch (alle werden in tests/examples.test.ts ausgeführt)
+    i18n.ts         Alle Texte der Oberfläche auf Deutsch und Englisch
+    icons.ts        Kleine SVG-Symbole (Kopieren, Flaggen, Vergrößern)
+    menu.ts         Aufklappmenüs („Optionen“, „Datei“; am Handy auch beim Speicher)
+    dom.ts          Hilfsfunktionen für DOM-Elemente
   storage/
     autosave.ts     Programm und Einstellungen automatisch im Browser (localStorage) sichern
     files.ts        Dateien öffnen/speichern (File System Access API, sonst Upload/Download)

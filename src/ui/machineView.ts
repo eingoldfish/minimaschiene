@@ -15,7 +15,7 @@ import {
   type NumberFormat,
 } from '../core';
 import { h, setChildren } from './dom';
-import { FLAG_HELP, HALT_STATUS, MODE_NAMES } from './texts';
+import { t } from './i18n';
 
 export interface MachineViewOptions {
   detailed: boolean;
@@ -38,68 +38,66 @@ export class MachineView {
   }
 
   update(state: Readonly<CpuState>, opts: MachineViewOptions): void {
+    const d = t();
     const fmt = opts.format === 'binary' ? 'signed' : opts.format;
     const value = (v: number) => formatWord(v, fmt === 'hex' ? 'hex' : fmt === 'unsigned' ? 'unsigned' : 'signed');
 
     // ----- accumulator -----
-    const acc = this.register('Akkumulator (A)', value(state.a),
-      'Hier steht das Ergebnis jeder Rechnung. Fast alle Befehle arbeiten mit dem Akku.');
+    const acc = this.register(d.accumulator, value(state.a), d.accumulatorHelp);
     if (opts.detailed) acc.append(this.details(state.a));
 
     // ----- program counter -----
-    const pc = this.register('Befehlszähler (PC)', String(state.pc),
-      'Adresse des nächsten Befehls, der geholt wird.');
+    const pc = this.register(d.programCounter, String(state.pc), d.programCounterHelp);
     pc.append(h('div', { class: 'reg-note' },
-      opts.currentLine !== undefined ? `→ Zeile ${opts.currentLine}` : 'außerhalb des Programms'));
+      opts.currentLine !== undefined ? d.pcLine(opts.currentLine) : d.pcOutside));
 
     // ----- instruction register -----
     const ir = state.ir;
     let irText = '—';
-    let irNote = 'Noch kein Befehl ausgeführt.';
+    let irNote = d.irNone;
     if (opts.hasExecuted) {
       const def = lookupOpcode(ir.opcode);
       if (state.micro && state.micro.index < 2) {
         // Micro steps: only the instruction word has been fetched so far.
         irText = def && ir.mode ? `${def.mnemonic} …` : '…';
-        irNote = 'Der Adressteil wird gerade geholt.';
+        irNote = d.irFetching;
       } else if (def && ir.mode) {
         irText = disassemble(encodeWord1(def, ir.mode), ir.address, opts.labelAt).text;
-        irNote = `Adressierung: ${MODE_NAMES[ir.mode]}`;
+        irNote = d.irMode(d.modes[ir.mode]);
       } else {
         irText = '---';
-        irNote = 'ungültiger Befehlscode';
+        irNote = d.irInvalid;
       }
     }
-    const irBox = this.register('Befehlsregister', irText, 'Der Befehl, der gerade ausgeführt wurde.', 'reg-ir');
+    const irBox = this.register(d.instructionRegister, irText, d.instructionRegisterHelp, 'reg-ir');
     irBox.append(h('div', { class: 'reg-note' }, irNote));
     if (opts.detailed && opts.hasExecuted) {
       irBox.append(h('div', { class: 'reg-detail' },
-        `Opcode ${ir.opcode} · Adressteil ${ir.address}`));
+        d.irDetail(ir.opcode, ir.address)));
     }
 
     // ----- status register -----
-    const flags = h('div', { class: 'flags', role: 'group', 'aria-label': 'Flags' },
+    const flags = h('div', { class: 'flags', role: 'group', 'aria-label': d.flagsLabel },
       ...(['z', 'n', 'v', 'c'] as const).map((f) =>
         h('span', {
           class: `flag${state.flags[f] ? ' on' : ''}`,
-          title: FLAG_HELP[f],
-          'aria-label': `${f.toUpperCase()} ${state.flags[f] ? 'gesetzt' : 'nicht gesetzt'}`,
+          title: d.flagHelp[f],
+          'aria-label': `${f.toUpperCase()} ${state.flags[f] ? d.flagOn : d.flagOff}`,
         }, h('span', { class: 'flag-name' }, f.toUpperCase()), h('span', { class: 'flag-value' }, state.flags[f] ? '1' : '0')),
       ));
     const status = h('div', { class: 'reg reg-status' },
-      h('div', { class: 'reg-label', title: 'Die Flags beschreiben das Ergebnis der letzten Rechnung.' }, 'Statusregister'),
+      h('div', { class: 'reg-label', title: d.statusRegisterHelp }, d.statusRegister),
       flags);
 
     const halted = h('div', { class: `machine-state${state.halted === 'none' ? '' : ' halted'}` },
-      'Maschine: ', h('strong', {}, HALT_STATUS[state.halted]));
+      d.machineState, h('strong', {}, d.haltStatus[state.halted]));
 
     // ----- stack pointer (extended mode) -----
     let sp: HTMLElement | null = null;
     if (opts.extended) {
-      sp = this.register('Stackpointer (SP)', String(state.sp),
-        'Zeigt auf den obersten Wert des Stacks. Der Stack wächst nach unten: PUSH verringert SP, POP erhöht ihn.');
+      sp = this.register(d.stackPointer, String(state.sp), d.stackPointerHelp);
       sp.append(h('div', { class: 'reg-note' },
-        state.sp === SP_START ? 'Stack ist leer' : `oberster Wert in Zelle ${state.sp}: ${toSigned16(state.memory[state.sp] ?? 0)}`));
+        state.sp === SP_START ? d.stackEmpty : d.stackTop(state.sp, toSigned16(state.memory[state.sp] ?? 0))));
     }
 
     setChildren(this.element, acc, pc, sp, irBox, status, halted);
@@ -113,7 +111,7 @@ export class MachineView {
 
   private details(v: number): HTMLElement {
     return h('div', { class: 'reg-detail' },
-      h('div', {}, `dezimal ${toSigned16(v)} · ohne Vorzeichen ${v} · ${toHex16(v)}`),
+      h('div', {}, t().valueDetail(toSigned16(v), v, toHex16(v))),
       h('div', { class: 'mono' }, toBinary16(v)));
   }
 }
