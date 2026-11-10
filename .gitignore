@@ -9,3 +9,6 @@ aWiedemann/
 
 # Dekompilierte Originalquellen (lokale Referenz, urheberrechtlich geschützt, nicht versionieren)
 decompiled_app_old/
+
+# Private Entwickler-Notizen (nicht versionieren)
+readme_private.md

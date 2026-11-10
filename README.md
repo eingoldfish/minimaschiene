@@ -1,37 +1,201 @@
 # Minimaschine Web
 
-Ein moderner, im Browser laufender CPU-Simulator nach dem Vorbild der **Minimaschine 4.0** (A. Wiedemann): eine 16-Bit-Akkumulatormaschine für den Informatikunterricht (LehrplanPLUS Bayern, Jgst. 12/13). Eigenständige Neuimplementierung – nur das dokumentierte Verhalten wird nachgebildet.
+**Ein Modellrechner zum Anfassen – direkt im Browser.**
 
-**Stand:** Version 1 (Meilenstein M7) – vollständiger Befehlssatz inkl. erweitertem Modus, Oberfläche mit Mikroschritt-Schaubild, Deutsch/Englisch, automatisches Speichern, Dateien öffnen/speichern, Teilen per Link, offline nutzbar (PWA), sechs Beispielprogramme, Veröffentlichung über GitHub Pages.
+👉 **Loslegen:** https://eingoidfisch.github.io/minimaschiene/
 
-## Voraussetzungen
+Die Minimaschine ist ein stark vereinfachter Computer, an dem man sieht, was in einem echten Prozessor passiert: Wie ein Befehl aus dem Speicher geholt, entschlüsselt und ausgeführt wird, wie der Akkumulator rechnet und wie Flags und Sprünge Schleifen und Verzweigungen möglich machen. Man schreibt kleine Programme in Assembler, übersetzt sie und lässt sie Schritt für Schritt – oder sogar Mikroschritt für Mikroschritt – laufen.
 
-- [Node.js](https://nodejs.org) ab Version 20 (enthält `npm`). Auf dem Mac z. B.:
+Gedacht ist das Ganze für den Informatikunterricht (z. B. Oberstufe, Thema „Aufbau und Funktionsweise eines Rechners“), zum Üben zu Hause und für alle, die verstehen wollen, wie ein Computer auf unterster Ebene arbeitet. Installation ist nicht nötig; nach dem ersten Besuch funktioniert die Seite auch offline, am Laptop, Tablet und Smartphone.
 
-  ```bash
-  brew install node
-  ```
+## Woher die Idee kommt
 
-## Befehle
+Das Vorbild und die **Hauptquelle** ist die **Minimaschine von A. Wiedemann**: **https://schule.awiedemann.de/**
+Dort gibt es das Original-Programm (Java), das Handbuch und weiteres Unterrichtsmaterial. Wer die Maschine gründlich verstehen oder im Unterricht einsetzen will, sollte dort zuerst nachlesen.
 
-Alle Befehle im Projektordner ausführen (dem Ordner, in dem diese `README.md` liegt).
+Diese Web-Version ist eine **eigenständige, inoffizielle Nachbildung**: Sie verhält sich wie die Minimaschine 4.0 und versteht dieselben Programme, wurde aber komplett neu geschrieben, damit sie ohne Java direkt im Browser läuft. Sie ist kein Produkt von A. Wiedemann.
+
+Ehrlicher Hinweis: Das Projekt ist größtenteils **„gevibecoded“**, also mit Hilfe einer KI (Claude) programmiert. Das Verhalten wurde mit vielen Tests gegen das Original abgeglichen – trotzdem können Fehler drin sein. Im Zweifel gilt das Original.
+
+## Wie die Maschine aufgebaut ist
+
+- **Speicher:** 65 536 Zellen (Adressen 0 bis 65535), jede enthält eine 16-Bit-Zahl. Programm und Daten liegen im selben Speicher.
+- **Akkumulator (A):** das einzige Rechenregister. Fast jeder Befehl arbeitet mit ihm: Werte werden in den Akku geladen, mit ihm verrechnet und wieder gespeichert.
+- **Befehlszähler (PC):** die Adresse des nächsten Befehls.
+- **Befehlsregister:** der gerade ausgeführte Befehl.
+- **Flags** – sie beschreiben das Ergebnis der letzten Rechnung und steuern die bedingten Sprünge:
+  - **Z** (Zero): Ergebnis war 0
+  - **N** (Negativ): Ergebnis war negativ
+  - **V** (Overflow): Überlauf beim Rechnen mit Vorzeichen
+  - **C** (Carry): Überlauf ohne Vorzeichen bzw. „Borgen“ beim Subtrahieren
+- **Stackpointer (SP):** nur im *erweiterten Modus*; zeigt auf das oberste Element des Stacks (der Stack wächst nach unten).
+
+Jeder Befehl belegt **zwei Speicherzellen**: In der ersten steht, *was* getan wird (Opcode und Adressierungsart), in der zweiten der *Adressteil*.
+
+## Was man auf dem Bildschirm sieht
+
+- **Programm (links):** der Editor für dein Assembler-Programm. Er färbt Befehle ein, unterstreicht Fehler und zeigt eine Hilfe, wenn du mit der Maus auf einen Befehl zeigst. Ein Klick auf eine Zeilennummer setzt einen **Haltepunkt**.
+- **Maschine (rechts):**
+  - **Schaubild:** Prozessor mit Rechenwerk und Steuerwerk, Speicher und die drei Busse (Daten-, Adress-, Steuerbus). Bei Mikroschritten sieht man, welcher Wert gerade wohin wandert, und liest dazu eine Erklärung.
+  - **Register:** Akku, Befehlszähler, Befehlsregister, Flags (und SP) als Zahlen mit kurzer Erklärung.
+  - **Speicher:** die Speicherzellen als Tabelle – wahlweise mit/ohne Vorzeichen, hexadezimal oder „als Befehle“. Zellen lassen sich per Klick ändern.
+- **Statuszeile:** sagt, was gerade passiert ist und was als Nächstes zu tun ist, und erklärt Fehler in verständlichen Worten.
+
+## So benutzt du sie
+
+1. **Programm schreiben** – oder über **Datei → Beispiel laden** ein fertiges Beispiel holen (Multiplikation, Summe, Maximum, Fakultät, ggT, Unterprogramm).
+2. **Assemblieren** (F9): Das Programm wird in Maschinencode übersetzt und in den Speicher geschrieben. Fehler stehen unter dem Editor.
+3. **Ausführen:**
+   - **Schritt ▶** (F10): genau einen Befehl ausführen.
+   - **Mikroschritt** (F11): einen Teilschritt des Befehlszyklus *Holen – Dekodieren – Ausführen* zeigen.
+   - **▶▶ Ausführen** (F5): bis `HALT`, zu einem Haltepunkt oder bis zur Abbruchschranke laufen lassen (Esc hält an). Das **Tempo** ist einstellbar.
+   - **◀ Schritt zurück** (Umschalt+F10): den letzten Schritt rückgängig machen.
+   - **Zurücksetzen:** Akku, Befehlszähler und Flags auf 0 – der Speicher bleibt.
+4. **Beobachten**, wie sich Register, Flags und Speicher verändern.
+
+### Weitere Funktionen
+
+- **Optionen:** *Detailansicht* (Werte zusätzlich hex/binär), *Animationen* (Werte wandern sichtbar über die Busse), *Erweiterter Modus* (Stack und Unterprogramme).
+- **Datei:** Programme als `.mia`-Datei öffnen und speichern (Strg/⌘+O, Strg/⌘+S).
+- **Link teilen:** erzeugt einen Link, in dem das Programm steckt. Es wird nichts auf einem Server gespeichert.
+- **Automatisches Speichern:** Dein letztes Programm ist beim nächsten Besuch wieder da.
+- **Deutsch/Englisch** (Flaggen-Knopf), **Hell/Dunkel**, **Beamer-Modus** (große Schrift für die Projektion).
+- **Kopieren:** Programmtext oder Speicherinhalt (als Tabelle, z. B. für eine Tabellenkalkulation).
+
+Auf dem Mac musst du für die F-Tasten eventuell zusätzlich `fn` drücken.
+
+## Ein erstes Programm
+
+```
+# Summe 1 + 2 + … + n
+        LOADI 0
+        STORE Summe        # Summe = 0
+Schleife:
+        LOAD n
+        JMPZ Fertig        # n = 0? Dann fertig.
+        ADD Summe
+        STORE Summe        # Summe = Summe + n
+        LOAD n
+        SUBI 1
+        STORE n            # n = n - 1
+        JMP Schleife
+Fertig:
+        HALT
+
+n:      WORD 10
+Summe:  WORD 0
+```
+
+Nach „Assemblieren“ und „Ausführen“ steht in der Zelle `Summe` der Wert 55.
+
+## Schreibweise (Syntax)
+
+- Eine Zeile: `[Marke:] [Befehl [Adresse]]` – alles nach `#` ist ein Kommentar.
+- **Marken** (z. B. `Schleife:`) geben einer Adresse einen Namen. Sie beginnen mit einem Buchstaben.
+- **Zahlen** dezimal (`42`, `-5`) oder hexadezimal (`0x2A`).
+- Groß- und Kleinschreibung der Befehle ist egal.
+- `Name: WORD Wert` reserviert eine Speicherzelle mit Startwert (Variable).
+
+### Adressierungsarten
+
+| Schreibweise | Name | Operand ist … | Beispiel |
+|---|---|---|---|
+| `adr` | direkt | der Inhalt der Zelle `adr` | `LOAD x` |
+| `$zahl` | unmittelbar | die Zahl selbst | `LOAD $5` (= `LOADI 5`) |
+| `(adr)` | indirekt | der Inhalt der Zelle, deren Adresse in `adr` steht | `LOAD (zeiger)` |
+| `adr(SP)` | relativ zum SP\* | der Inhalt der Zelle `adr + SP` | `LOAD 1(SP)` |
+| `@adr(SP)` | indirekt relativ zum SP\* | der Inhalt der Zelle, deren Adresse in `adr + SP` steht | `LOAD @1(SP)` |
+| `$adr(SP)` | unmittelbar relativ zum SP\* | die Zahl `adr + SP` | `LOAD $1(SP)` |
+
+\* nur im erweiterten Modus
+
+Für die unmittelbare Adressierung gibt es Kurzformen mit angehängtem **I**: `LOADI 5` bedeutet dasselbe wie `LOAD $5`. Das gibt es für alle Rechen-, Lade- und Logikbefehle (`ADDI`, `SUBI`, `CMPI`, `ANDI`, `SHLI` …).
+
+## Alle Befehle
+
+### Transport
 
 | Befehl | Wirkung |
 |---|---|
-| `npm install` | Abhängigkeiten installieren (einmalig bzw. nach Änderungen an `package.json`) |
-| `npm run dev` | Entwicklungsserver starten → http://localhost:5173 |
-| `npm test` | Tests im Beobachtungsmodus (laufen bei jeder Änderung neu) |
-| `npm run test:run` | Tests einmal ausführen |
-| `npm run typecheck` | TypeScript prüfen (inkl. „Core ohne DOM“) |
-| `npm run build` | Produktionsversion nach `dist/` bauen |
-| `npm run preview` | Gebaute Version lokal ansehen |
+| `LOAD x` | Lädt den Operanden in den Akku. |
+| `STORE adr` | Speichert den Akku in der angegebenen Zelle. |
+| `LOADC` | Lädt das Carry-Flag (0 oder 1) in den Akku. |
 
-## Abhängigkeiten
+### Rechnen
 
-| Paket | Wozu |
+| Befehl | Wirkung |
 |---|---|
-| `@codemirror/*`, `@lezer/highlight` | Code-Editor mit Zeilennummern, Rückgängig, Hervorhebung, Fehlermarkierung und Tooltips (in den Projekt-Instruktionen ausdrücklich erlaubt) |
-| `typescript`, `vite`, `vitest` (nur Entwicklung) | Übersetzen, Entwicklungsserver/Build, Tests |
+| `ADD x` | Akku = Akku + Operand |
+| `SUB x` | Akku = Akku − Operand |
+| `MUL x` | Akku = Akku · Operand (untere 16 Bit) |
+| `DIV x` | Akku = Akku / Operand (ganzzahlig, mit Vorzeichen) |
+| `MOD x` | Akku = Rest von Akku / Operand (mit Vorzeichen) |
+| `DIVU x` | Division ohne Vorzeichen |
+| `MODU x` | Rest der Division ohne Vorzeichen |
+| `MULH x` | Produkt (mit Vorzeichen) / 65536 |
+| `MULHU x` | obere 16 Bit des Produkts (ohne Vorzeichen) |
+| `CMP x` | Vergleicht Akku mit Operand (rechnet Akku − Operand, setzt nur die Flags; der Akku bleibt) |
+
+### Logik und Schieben
+
+| Befehl | Wirkung |
+|---|---|
+| `AND x` | bitweises Und |
+| `OR x` | bitweises Oder |
+| `XOR x` | bitweises Exklusiv-Oder |
+| `NOT` | kehrt alle Bits im Akku um |
+| `SHL x` | schiebt um x Stellen nach links (C = zuletzt herausgeschobenes Bit) |
+| `SHR x` | schiebt um x Stellen nach rechts, links kommen Nullen nach |
+| `SHRA x` | schiebt nach rechts, das Vorzeichen bleibt erhalten |
+
+### Sprünge
+
+Sprünge werten die Flags der **letzten Rechnung** aus (oft eines `CMP`). Die Schreibweise in Klammern ist gleichwertig.
+
+| Befehl | springt, wenn … |
+|---|---|
+| `JMP adr` | immer |
+| `JMPZ adr` (`JEQ`) | Ergebnis = 0 |
+| `JMPNZ adr` (`JNE`) | Ergebnis ≠ 0 |
+| `JMPP adr` (`JGT`) | Ergebnis > 0 |
+| `JMPNN adr` (`JGE`) | Ergebnis ≥ 0 |
+| `JMPN adr` (`JLT`) | Ergebnis < 0 |
+| `JMPNP adr` (`JLE`) | Ergebnis ≤ 0 |
+| `JMPV adr` (`JOV`) | Überlauf mit Vorzeichen (V) |
+| `JMPC adr` (`JOC`) | Überlauf ohne Vorzeichen (C) |
+| `JHI adr` | ohne Vorzeichen „größer“ |
+| `JHS adr` | ohne Vorzeichen „größer oder gleich“ |
+| `JLO adr` | ohne Vorzeichen „kleiner“ |
+| `JLS adr` | ohne Vorzeichen „kleiner oder gleich“ |
+
+Mit `JMP (adr)` springt man zu der Adresse, die in der Zelle `adr` steht.
+
+### Steuerung
+
+| Befehl | Wirkung |
+|---|---|
+| `HALT` (`HOLD`) | hält die Maschine an |
+| `NOOP` | tut nichts |
+| `RESET` | setzt Akku, Befehlszähler und Flags auf 0 und hält an |
+
+### Stack und Unterprogramme (nur im erweiterten Modus)
+
+| Befehl | Wirkung |
+|---|---|
+| `JSR adr` (`CALL`) | Unterprogramm aufrufen: Rücksprungadresse auf den Stack, dann Sprung |
+| `RTS` (`RETURN`) | Rücksprung aus dem Unterprogramm |
+| `PUSH` | legt den Akku auf den Stack |
+| `POP` | holt den obersten Stack-Wert in den Akku |
+| `RSV n` | reserviert n Zellen auf dem Stack (z. B. für lokale Variablen) |
+| `REL n` | gibt n Zellen auf dem Stack wieder frei |
+
+### Pseudobefehl
+
+| Befehl | Wirkung |
+|---|---|
+| `WORD wert` | reserviert eine Speicherzelle mit dem Startwert `wert` |
+
+Die genaue Wirkung jedes Befehls auf die Flags zeigt der Editor, wenn du mit der Maus auf den Befehl zeigst.
 
 ## Tastenkürzel
 
@@ -39,89 +203,6 @@ Alle Befehle im Projektordner ausführen (dem Ordner, in dem diese `README.md` l
 |---|---|
 | F9 / Umschalt+F9 | Assemblieren / … und Speicher behalten |
 | F10 / Umschalt+F10 | Schritt / Schritt zurück |
-| Strg+S / Strg+O (Mac: ⌘S / ⌘O) | Programm speichern / öffnen |
-| F11 | Mikroschritt (in manchen Browsern unter Windows schaltet F11 stattdessen den Vollbildmodus – dann den Knopf benutzen) |
-| F5 | Ausführen bzw. Pause (auch Esc hält an) |
-
-Auf dem Mac ggf. zusätzlich die `fn`-Taste drücken.
-
-## Speichern, Teilen, Offline
-
-- **Automatisch:** Das Programm und die Einstellungen werden im Browser gespeichert (`localStorage`) und beim nächsten Besuch wiederhergestellt.
-- **Dateien:** „Öffnen“/„Speichern“ (im Menü „Datei“) arbeiten mit `.mia`-Dateien. In Chrome und Edge wird direkt in die gewählte Datei gespeichert, in Firefox und Safari landet die Datei im Download-Ordner.
-- **Teilen:** „Link teilen“ kopiert einen Link, der das Programm (komprimiert) enthält. Das Programm steht hinter dem `#` und wird nie an einen Server geschickt.
-- **Offline:** Nach dem ersten Besuch der veröffentlichten Version funktioniert die App auch ohne Internet (Service Worker). Im Entwicklungsmodus (`npm run dev`) ist das absichtlich abgeschaltet; zum Ausprobieren `npm run build` und dann `npm run preview`.
-
-## Sprache, Kopieren, Beamer
-
-- **Menüs:** „Optionen“ oben rechts enthält Detailansicht, Animationen und erweiterten Modus. „Datei“ über dem Editor enthält Öffnen, Speichern, Link teilen und die Beispielprogramme. Das Kopier-Symbol bleibt direkt daneben sichtbar.
-
-- **Sprache:** Der Flaggen-Knopf oben rechts (zeigt die Sprache, zu der man wechselt) schaltet die ganze Oberfläche um: Fehlermeldungen des Assemblers, Mikroschritt-Erklärungen, Befehlshilfe und Beispielprogramme. Maschine, Programm und Haltepunkte bleiben dabei erhalten. Beim ersten Start gilt die Sprache des Browsers.
-- **Kopieren:** Das Kopier-Symbol über dem Editor kopiert den Programmtext. Das Kopier-Symbol beim Speicher kopiert die Zellen 0 bis zur letzten belegten Zelle als Tabelle (10 Werte pro Zeile, mit Adressspalte, in der gewählten Darstellung). Die Tabelle lässt sich direkt in eine Tabellenkalkulation einfügen. Im erweiterten Modus kommt ein benutzter Stack als eigener Block dazu.
-- **Hell/Dunkel:** Der Schalter oben rechts folgt beim ersten Start der Systemeinstellung. Nach dem ersten Klick wechselt er nur noch zwischen hell und dunkel (gespeichert).
-- **Beamer:** Der Beamer-Modus vergrößert die Schrift und schaltet auf helle Farben. Beim Ausschalten kommt das vorherige Farbschema zurück.
-- **Statuszeile:** Unwichtige Meldungen (Begrüßung, einzelne Schritte, Bestätigungen wie „kopiert“) verschwinden nach 5 Sekunden. Fehler, Warnungen und Hinweise, was als Nächstes zu tun ist (z. B. nach dem Laden eines Beispiels), bleiben stehen.
-- **Smartphone:** Kompakte Kopfleiste (Titel, „Optionen“ mit dem Hell/Dunkel-Schalter, Flagge; kein Beamer-Knopf), Steuerknöpfe in zwei Zeilen, Tempo und Abbruchschranke in einer Zeile. Beim Speicher sind die Darstellung und „Ansicht“ (dem PC folgen, Zum PC/SP/Adressteil, Adressen hexadezimal) Aufklappmenüs; „Gehe zu“ und Kopieren bleiben sichtbar. Schmale Zeilennummern im Editor; unter „Maschine“ ist zuerst der Reiter „Register“ offen. Der Vergrößern-Knopf beim Programm zeigt nur noch das Eingabefeld über den ganzen Bildschirm, mit einem Knopf zum Verkleinern.
-- **Größe der Bereiche (Laptop):** Der Balken zwischen Programm und Maschine lässt sich ziehen (auch mit den Pfeiltasten; Doppelklick = halb und halb). Die Breite wird gespeichert. Der Vergrößern-Knopf oben rechts in „Programm“ bzw. „Maschine“ lässt diesen Bereich das ganze Fenster unter der Steuerleiste füllen: Der Editor zeigt dann mehr Code bei gleicher Schrift, das Schaubild wird größer. Zurück mit demselben Knopf oder Esc.
-
-## Projektstruktur
-
-```
-index.html          Einstiegsseite
-src/
-  main.ts           Startet die App
-  styles.css        Farben (hell/dunkel), Layout
-  core/             Reine Logik, KEIN DOM-Zugriff (vom Compiler erzwungen)
-    isa.ts          Befehlssatz (zentrale Tabelle)
-    alu.ts          Rechenwerk: Operationen, Flags, Sprungbedingungen (reine Funktionen)
-    cpu.ts          Register, Speicher, Befehlsausführung
-    assembler.ts    Text → Speicherabbild
-    disassembler.ts Speicher → Befehlstext
-    format.ts       Zahlendarstellung (signed/unsigned/hex/binär)
-    microcode.ts    Mikroschritte: Holen – Dekodieren – Ausführen mit Erklärtexten
-    lang.ts         Sprachtyp (de/en) für die zweisprachigen Texte im Core
-    index.ts        Öffentliche API des Cores
-  ui/               Oberfläche (nutzt nur src/core/index.ts)
-    app.ts          Aufbau der Seite, Knöpfe, Tastenkürzel, Programmlauf
-    session.ts      Steuerlogik ohne DOM (Assemblieren, Schritt, Haltepunkte) – getestet
-    editor.ts       Code-Editor (CodeMirror 6)
-    machineView.ts  Anzeige der Register und Flags (Reiter „Register“)
-    diagramView.ts  SVG-Schaubild mit Animation (Reiter „Schaubild“)
-    memoryView.ts   Speichertabelle (nur sichtbare Zeilen werden gezeichnet)
-    memoryTable.ts  Zelltext und Speicher als Tabelle zum Kopieren – getestet
-    examples.ts     Beispielprogramme auf Deutsch und Englisch (alle werden in tests/examples.test.ts ausgeführt)
-    i18n.ts         Alle Texte der Oberfläche auf Deutsch und Englisch
-    icons.ts        Kleine SVG-Symbole (Kopieren, Flaggen, Vergrößern)
-    menu.ts         Aufklappmenüs („Optionen“, „Datei“; am Handy auch beim Speicher)
-    dom.ts          Hilfsfunktionen für DOM-Elemente
-  storage/
-    autosave.ts     Programm und Einstellungen automatisch im Browser (localStorage) sichern
-    files.ts        Dateien öffnen/speichern (File System Access API, sonst Upload/Download)
-    share.ts        Programm komprimiert im Link (#code=…) – nichts geht an einen Server
-public/
-  sw.js             Service Worker: macht die App offline nutzbar
-  manifest.webmanifest, icon*.png, icon.svg   App-Name und Symbol zum Installieren
-tests/              Vitest-Tests
-.github/workflows/
-  deploy.yml        Baut, testet und veröffentlicht auf GitHub Pages
-docs/
-  kompatibilitaet.md  Annahmen und Abweichungen zum Original
-```
-
-## Deployment (GitHub Pages)
-
-Die App besteht nur aus statischen Dateien (`dist/`) und braucht keinen Server mit eigener Logik.
-
-**Automatisch:** Der Workflow [.github/workflows/deploy.yml](.github/workflows/deploy.yml) läuft bei jedem Push auf `main`. Er installiert die Abhängigkeiten, führt alle Tests und den Typecheck aus, baut die App und veröffentlicht `dist/`. Schlägt ein Test fehl, wird nichts veröffentlicht. Den Fortschritt siehst du im Repository unter **Actions**.
-
-**Einmalig einrichten:** Im Repository auf GitHub unter **Settings → Pages → Build and deployment → Source** den Eintrag **„GitHub Actions“** wählen. Danach ist die App nach jedem Push erreichbar unter:
-
-`https://<github-name>.github.io/<repository>/`
-
-Für dieses Repository also https://eingoidfisch.github.io/minimaschiene/.
-
-**Hinweise**
-
-- Die Pfade sind relativ (`base: './'` in `vite.config.ts`), deshalb funktioniert die App auch in einem Unterordner und auf jedem anderen statischen Webserver: Inhalt von `dist/` hochladen, fertig.
-- Nach einem Update sehen Besucher die neue Version beim nächsten Laden der Seite (der Service Worker holt `index.html` immer zuerst aus dem Netz). Offline läuft weiter die zuletzt geladene Version.
-- Den Workflow kann man unter **Actions → Deploy to GitHub Pages → Run workflow** auch von Hand starten.
+| F11 | Mikroschritt |
+| F5 | Ausführen bzw. Pause (Esc hält an) |
+| Strg+S / Strg+O (Mac: ⌘S / ⌘O) | Speichern / Öffnen |
