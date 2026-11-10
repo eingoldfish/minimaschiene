@@ -2,7 +2,7 @@
 
 Ein moderner, im Browser laufender CPU-Simulator nach dem Vorbild der **Minimaschine 4.0** (A. Wiedemann): eine 16-Bit-Akkumulatormaschine für den Informatikunterricht (LehrplanPLUS Bayern, Jgst. 12/13). Eigenständige Neuimplementierung – nur das dokumentierte Verhalten wird nachgebildet.
 
-**Stand:** Meilenstein M5 – vollständiger Befehlssatz inkl. erweitertem Modus (Stackpointer, `JSR`/`RTS`/`PUSH`/`POP`/`RSV`/`REL`, Adressierung relativ zum SP), Oberfläche mit Mikroschritt-Schaubild. Es fehlen noch Speichern/Teilen/Offline (M6) und Feinschliff/Deployment (M7).
+**Stand:** Meilenstein M6 – vollständiger Befehlssatz inkl. erweitertem Modus, Oberfläche mit Mikroschritt-Schaubild, automatisches Speichern, Dateien öffnen/speichern, Teilen per Link, offline nutzbar (PWA), sechs Beispielprogramme. Es fehlen noch Feinschliff und Deployment (M7).
 
 ## Voraussetzungen
 
@@ -39,10 +39,18 @@ Alle Befehle im Projektordner ausführen (dem Ordner, in dem diese `README.md` l
 |---|---|
 | F9 / Umschalt+F9 | Assemblieren / … und Speicher behalten |
 | F10 / Umschalt+F10 | Schritt / Schritt zurück |
+| Strg+S / Strg+O (Mac: ⌘S / ⌘O) | Programm speichern / öffnen |
 | F11 | Mikroschritt (in manchen Browsern unter Windows schaltet F11 stattdessen den Vollbildmodus – dann den Knopf benutzen) |
 | F5 | Ausführen bzw. Pause (auch Esc hält an) |
 
 Auf dem Mac ggf. zusätzlich die `fn`-Taste drücken.
+
+## Speichern, Teilen, Offline
+
+- **Automatisch:** Das Programm und die Einstellungen werden im Browser gespeichert (`localStorage`) und beim nächsten Besuch wiederhergestellt.
+- **Dateien:** „Öffnen“/„Speichern“ arbeiten mit `.mia`-Dateien. In Chrome und Edge wird direkt in die gewählte Datei gespeichert, in Firefox und Safari landet die Datei im Download-Ordner.
+- **Teilen:** „Link teilen“ kopiert einen Link, der das Programm (komprimiert) enthält. Das Programm steht hinter dem `#` und wird nie an einen Server geschickt.
+- **Offline:** Nach dem ersten Besuch der veröffentlichten Version funktioniert die App auch ohne Internet (Service Worker). Im Entwicklungsmodus (`npm run dev`) ist das absichtlich abgeschaltet; zum Ausprobieren `npm run build` und dann `npm run preview`.
 
 ## Projektstruktur
 
@@ -67,8 +75,15 @@ src/
     machineView.ts  Anzeige der Register und Flags (Reiter „Register“)
     diagramView.ts  SVG-Schaubild mit Animation (Reiter „Schaubild“)
     memoryView.ts   Speichertabelle (nur sichtbare Zeilen werden gezeichnet)
-    dom.ts, texts.ts, examples.ts  Hilfsfunktionen, Texte, Beispielprogramm
-  storage/          localStorage, Dateien, Teilen-Link (ab M6)
+    examples.ts     Beispielprogramme (jedes wird in tests/examples.test.ts ausgeführt)
+    dom.ts, texts.ts  Hilfsfunktionen, Texte
+  storage/
+    autosave.ts     Programm und Einstellungen automatisch im Browser (localStorage) sichern
+    files.ts        Dateien öffnen/speichern (File System Access API, sonst Upload/Download)
+    share.ts        Programm komprimiert im Link (#code=…) – nichts geht an einen Server
+public/
+  sw.js             Service Worker: macht die App offline nutzbar
+  manifest.webmanifest, icon*.png, icon.svg   App-Name und Symbol zum Installieren
 tests/              Vitest-Tests
 docs/
   kompatibilitaet.md  Annahmen und Abweichungen zum Original

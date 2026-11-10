@@ -9,7 +9,10 @@ import { disassembleAt, type AssembleError, type CyclePhase, type MicroStepEvent
 import { DiagramView } from './diagramView';
 import { h, setChildren } from './dom';
 import { createEditor, type ProgramEditor } from './editor';
-import { DEFAULT_PROGRAM } from './examples';
+import { loadFileName, loadSettings, loadSource, saveFileName, saveSettings, saveSource } from '../storage/autosave';
+import { openFile, saveFile, type SaveTarget } from '../storage/files';
+import { decodeShare, encodeShare } from '../storage/share';
+import { DEFAULT_PROGRAM, EXAMPLES } from './examples';
 import { MachineView } from './machineView';
 import { MemoryView, type MemoryFormat } from './memoryView';
 import { Session, type StopReason } from './session';
@@ -63,6 +66,16 @@ export class App {
   private machineTab: 'diagram' | 'registers' = 'diagram';
   /** Extended mode: stack pointer and stack instructions. */
   private extended = false;
+  private beamer = false;
+
+  // ----- file -----
+  /** Name of the opened/saved file, null if never saved. */
+  private fileName: string | null = loadFileName();
+  /** For saving into the same file again (Chrome/Edge only). */
+  private saveTarget: SaveTarget | undefined;
+  /** Text at the last open/save/example load – to warn before replacing unsaved work. */
+  private savedText: string | null = null;
+  private autosaveTimer = 0;
 
   // ----- run state -----
   /** The source was edited after the last successful assembling. */
@@ -80,10 +93,13 @@ export class App {
   private readonly themeBtn: HTMLButtonElement;
   private readonly explanationEl: HTMLElement;
   private readonly spButton: HTMLButtonElement;
+  private readonly fileNameEl: HTMLElement;
   private readonly tabButtons: Record<'diagram' | 'registers', HTMLButtonElement>;
   private readonly tabPanes: Record<'diagram' | 'registers', HTMLElement>;
 
   constructor(root: HTMLElement) {
+    this.applySavedSettings(loadSettings());
+
     // ----- header with run controls -----
     this.btn = {
       stepBack: button('◀ Schritt zurück', () => this.stepBack(), { key: KEYS.stepBack, title: 'Den letzten Befehl rückgängig machen' }),
@@ -95,7 +111,7 @@ export class App {
 
     const speedSelect = h('select', {
       'aria-label': 'Tempo beim Ausführen',
-      onchange: (ev: Event) => { this.speedIndex = Number((ev.target as HTMLSelectElement).value); },
+      onchange: (ev: Event) => { this.speedIndex = Number((ev.target as HTMLSelectElement).value); this.persistSettings(); },
     }, ...SPEEDS.map((s, i) => h('option', { value: String(i), selected: i === this.speedIndex }, s.label)));
 
     const limitInput = h('input', {
@@ -106,6 +122,7 @@ export class App {
         const v = Number(input.value);
         if (Number.isFinite(v) && v >= 1) this.limitSeconds = Math.min(600, v);
         input.value = String(this.limitSeconds);
+        this.persistSettings();
       },
     });
 
@@ -116,13 +133,13 @@ export class App {
         h('h1', {}, 'Minimaschine'),
         h('div', { class: 'view-settings' },
           h('label', { class: 'check', title: 'Zeigt Werte zusätzlich hexadezimal/binär und den Opcode im Befehlsregister' },
-            h('input', { type: 'checkbox', onchange: (ev: Event) => { this.detailed = (ev.target as HTMLInputElement).checked; this.render(); } }),
+            h('input', { type: 'checkbox', checked: this.detailed, onchange: (ev: Event) => { this.detailed = (ev.target as HTMLInputElement).checked; this.persistSettings(); this.render(); } }),
             'Detailansicht'),
           h('label', { class: 'check', title: 'Werte im Schaubild wandern sichtbar über die Busse' },
-            h('input', { type: 'checkbox', checked: this.animations, onchange: (ev: Event) => { this.animations = (ev.target as HTMLInputElement).checked; } }),
+            h('input', { type: 'checkbox', checked: this.animations, onchange: (ev: Event) => { this.animations = (ev.target as HTMLInputElement).checked; this.persistSettings(); } }),
             'Animationen'),
           h('label', { class: 'check', title: 'Stackpointer (SP), Stackbefehle (JSR, RTS, PUSH, POP, RSV, REL) und Adressierung relativ zum SP' },
-            h('input', { type: 'checkbox', onchange: (ev: Event) => this.setExtended((ev.target as HTMLInputElement).checked) }),
+            h('input', { type: 'checkbox', checked: this.extended, class: 'extended-box', onchange: (ev: Event) => this.setExtended((ev.target as HTMLInputElement).checked) }),
             'Erweiterter Modus'),
           button('Beamer', () => this.toggleBeamer(), { class: 'subtle', title: 'Große Schrift für die Projektion' }),
           this.themeBtn)),
@@ -136,6 +153,22 @@ export class App {
 
     // ----- editor panel -----
     const editorHost = h('div', { class: 'editor-host' });
+    this.fileNameEl = h('span', { class: 'file-name' });
+    const exampleSelect = h('select', {
+      'aria-label': 'Beispielprogramm laden',
+      onchange: (ev: Event) => {
+        const select = ev.target as HTMLSelectElement;
+        this.loadExample(select.value);
+        select.value = '';
+      },
+    }, h('option', { value: '' }, 'Beispiel laden …'),
+    ...EXAMPLES.map((e) => h('option', { value: e.id, title: e.description }, e.title)));
+    const fileBar = h('div', { class: 'file-bar' },
+      exampleSelect,
+      button('Öffnen', () => void this.openProgram(), { class: 'small', title: 'Programmdatei öffnen – Tastenkürzel: Strg+O' }),
+      button('Speichern', () => void this.saveProgram(), { class: 'small', title: 'Programm als Datei speichern – Tastenkürzel: Strg+S' }),
+      button('Link teilen', () => void this.shareProgram(), { class: 'small', title: 'Link erzeugen, der das Programm enthält – es wird nichts auf einem Server gespeichert' }),
+      this.fileNameEl);
     this.errorList = h('ul', { class: 'error-list', hidden: true, 'aria-label': 'Fehler im Programm' });
     const editorPanel = h('section', { class: 'panel panel-editor', 'aria-labelledby': 'h-editor' },
       h('div', { class: 'panel-head' },
@@ -143,6 +176,7 @@ export class App {
         h('div', { class: 'btn-group' },
           button('Assemblieren', () => this.assemble(false), { key: KEYS.assemble, class: 'primary', title: 'Programm übersetzen und in den (vorher gelöschten) Speicher laden' }),
           button('… und Speicher behalten', () => this.assemble(true), { key: KEYS.assembleKeep, title: 'Programm übersetzen, ohne den übrigen Speicher zu löschen' }))),
+      fileBar,
       editorHost,
       this.errorList,
       h('p', { class: 'hint' }, 'Tipp: Klick auf eine Zeilennummer setzt einen Haltepunkt. Zeig mit der Maus auf einen Befehl, um eine Hilfe zu sehen.'));
@@ -178,7 +212,7 @@ export class App {
       ...(Object.keys(formatNames) as MemoryFormat[]).map((f) =>
         h('label', {},
           h('input', { type: 'radio', name: 'mem-format', value: f, checked: f === this.format,
-            onchange: () => { this.format = f; this.render(); } }),
+            onchange: () => { this.format = f; this.persistSettings(); this.render(); } }),
           h('span', {}, formatNames[f]))));
     const gotoInput = h('input', {
       class: 'goto-input', placeholder: 'Adresse', 'aria-label': 'Gehe zu Adresse',
@@ -200,7 +234,7 @@ export class App {
       },
     });
     const followBox = h('input', { type: 'checkbox', checked: this.followPc,
-      onchange: (ev: Event) => { this.followPc = (ev.target as HTMLInputElement).checked; this.render(); } });
+      onchange: (ev: Event) => { this.followPc = (ev.target as HTMLInputElement).checked; this.persistSettings(); this.render(); } });
     const memoryPanel = h('section', { class: 'panel panel-memory', 'aria-labelledby': 'h-memory' },
       h('div', { class: 'panel-head' },
         h('h2', { id: 'h-memory' }, 'Speicher'),
@@ -213,7 +247,7 @@ export class App {
           { class: 'small', title: 'Zur Adresse aus dem Befehlsregister springen' }),
         h('label', { class: 'field' }, 'Gehe zu', gotoInput),
         h('label', { class: 'check' },
-          h('input', { type: 'checkbox', onchange: (ev: Event) => { this.hexAddresses = (ev.target as HTMLInputElement).checked; this.render(); } }),
+          h('input', { type: 'checkbox', checked: this.hexAddresses, onchange: (ev: Event) => { this.hexAddresses = (ev.target as HTMLInputElement).checked; this.persistSettings(); this.render(); } }),
           'Adressen hexadezimal')),
       this.memory.element);
 
@@ -221,16 +255,174 @@ export class App {
       h('main', { class: 'app-main' }, editorPanel, machinePanel, memoryPanel));
 
     // ----- editor (needs its host element in the page) -----
-    this.editor = createEditor(editorHost, DEFAULT_PROGRAM, {
+    const autosaved = loadSource();
+    if (autosaved === null) this.savedText = DEFAULT_PROGRAM;
+    this.editor = createEditor(editorHost, autosaved ?? DEFAULT_PROGRAM, {
       onChange: () => this.onSourceChanged(),
       onBreakpointsChange: (lines) => this.session.setBreakpointLines(lines),
     });
 
     document.addEventListener('keydown', (ev) => this.onKey(ev));
+    // Save immediately when the page is closed or hidden (the timer might not run anymore).
+    window.addEventListener('pagehide', () => this.autosaveNow());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.autosaveNow(); });
+    window.addEventListener('hashchange', () => void this.loadFromHash());
+
     this.applyTheme();
+    document.documentElement.classList.toggle('beamer', this.beamer);
+    this.diagram.setExtended(this.extended);
+    this.spButton.hidden = !this.extended;
+    this.updateFileName();
     this.setMachineTab(this.machineTab);
-    this.setStatus('Willkommen! Drücke „Assemblieren“, um das Beispielprogramm in den Speicher zu laden.', 'info');
+    this.setStatus(autosaved === null
+      ? 'Willkommen! Drücke „Assemblieren“, um das Beispielprogramm in den Speicher zu laden.'
+      : 'Willkommen zurück! Dein letztes Programm wurde wiederhergestellt.', 'info');
     this.render();
+    void this.loadFromHash();
+  }
+
+  // ==================================================================
+  // Files, examples, sharing, autosave
+  // ==================================================================
+
+  /** Asks before replacing a program that was changed since the last save. */
+  private confirmReplace(question = 'Dein aktuelles Programm wurde nicht gespeichert und wird ersetzt. Trotzdem fortfahren?'): boolean {
+    const text = this.editor.getText();
+    const unchanged = text.trim() === '' || text === this.savedText || EXAMPLES.some((e) => e.source === text);
+    return unchanged || window.confirm(question);
+  }
+
+  /** Puts a new program into the editor. */
+  private replaceProgram(text: string, fileName: string | null, target?: SaveTarget): void {
+    this.stopRun();
+    this.leaveMicroView();
+    this.editor.setText(text);
+    this.editor.setErrors([]);
+    this.showErrors([]);
+    this.fileName = fileName;
+    this.saveTarget = target;
+    this.savedText = text;
+    saveFileName(fileName);
+    this.updateFileName();
+    this.autosaveNow();
+    this.render();
+  }
+
+  private loadExample(id: string): void {
+    const example = EXAMPLES.find((e) => e.id === id);
+    if (!example || !this.confirmReplace()) return;
+    if (example.extended && !this.extended) this.setExtended(true, true);
+    this.replaceProgram(example.source, null);
+    this.setStatus(`Beispiel „${example.title}“ geladen: ${example.description}. Jetzt assemblieren (${KEYS.assemble}).`, 'success');
+  }
+
+  private async openProgram(): Promise<void> {
+    if (!this.confirmReplace()) return;
+    try {
+      const file = await openFile();
+      if (!file) return;
+      this.replaceProgram(file.text, file.name, file.target);
+      this.setStatus(`„${file.name}“ geöffnet. Jetzt assemblieren (${KEYS.assemble}).`, 'success');
+    } catch (e) {
+      this.setStatus(`Die Datei konnte nicht geöffnet werden. (${e instanceof Error ? e.message : String(e)})`, 'error');
+    }
+  }
+
+  private async saveProgram(): Promise<void> {
+    const text = this.editor.getText();
+    try {
+      const result = await saveFile(text, this.fileName ?? 'programm', this.saveTarget);
+      if (!result) return;
+      this.fileName = result.name;
+      this.saveTarget = result.target;
+      this.savedText = text;
+      saveFileName(result.name);
+      this.updateFileName();
+      this.setStatus(result.downloaded
+        ? `Als „${result.name}“ heruntergeladen – du findest die Datei im Download-Ordner.`
+        : `Gespeichert in „${result.name}“.`, 'success');
+    } catch (e) {
+      this.setStatus(`Speichern hat nicht geklappt. (${e instanceof Error ? e.message : String(e)})`, 'error');
+    }
+  }
+
+  private async shareProgram(): Promise<void> {
+    const fragment = await encodeShare({ source: this.editor.getText(), extended: this.extended });
+    const url = `${location.href.split('#')[0]}#${fragment}`;
+    const longHint = url.length > 2000
+      ? ` Achtung: Der Link ist sehr lang (${url.length} Zeichen) – manche Messenger kürzen so lange Links.`
+      : '';
+    try {
+      await navigator.clipboard.writeText(url);
+      this.setStatus('Link kopiert! Wer ihn öffnet, sieht genau dieses Programm. Das Programm steckt im Link selbst – '
+        + `es wird nichts auf einem Server gespeichert.${longHint}`, 'success');
+    } catch {
+      // Clipboard not allowed (e.g. old browser): show the link to copy by hand.
+      window.prompt('Diesen Link kopieren und weitergeben:', url);
+    }
+  }
+
+  /** Opens a program from a shared link (#code=…). */
+  private async loadFromHash(): Promise<void> {
+    if (!location.hash.includes('code=')) return;
+    try {
+      const shared = await decodeShare(location.hash);
+      // Remove the program from the address bar, so a reload does not load it again.
+      history.replaceState(null, '', location.pathname + location.search);
+      if (!shared) return;
+      if (shared.source !== this.editor.getText()
+        && !this.confirmReplace('Der Link enthält ein Programm. Soll es dein aktuelles (nicht gespeichertes) Programm ersetzen?')) {
+        return;
+      }
+      if (shared.extended && !this.extended) this.setExtended(true, true);
+      this.replaceProgram(shared.source, null);
+      this.setStatus(`Programm aus dem Link geladen. Jetzt assemblieren (${KEYS.assemble}).`, 'success');
+    } catch {
+      this.setStatus('Der Link ist unvollständig oder beschädigt – das Programm konnte nicht gelesen werden.', 'error');
+    }
+  }
+
+  private autosaveNow(): void {
+    window.clearTimeout(this.autosaveTimer);
+    saveSource(this.editor.getText());
+  }
+
+  private updateFileName(): void {
+    this.fileNameEl.textContent = this.fileName ? `Datei: ${this.fileName}` : '';
+  }
+
+  /** Takes over the saved settings, checking every value. */
+  private applySavedSettings(saved: Record<string, unknown>): void {
+    const bool = (key: string, fallback: boolean) => (typeof saved[key] === 'boolean' ? (saved[key] as boolean) : fallback);
+    this.detailed = bool('detailed', this.detailed);
+    this.animations = bool('animations', this.animations);
+    this.extended = bool('extended', this.extended);
+    this.hexAddresses = bool('hexAddresses', this.hexAddresses);
+    this.followPc = bool('followPc', this.followPc);
+    this.beamer = bool('beamer', this.beamer);
+    const speed = saved['speedIndex'];
+    if (typeof speed === 'number' && SPEEDS[speed]) this.speedIndex = speed;
+    const limit = saved['limitSeconds'];
+    if (typeof limit === 'number' && limit >= 1 && limit <= 600) this.limitSeconds = limit;
+    const theme = saved['theme'];
+    if (theme === 'auto' || theme === 'light' || theme === 'dark') this.theme = theme;
+    const format = saved['format'];
+    if (format === 'signed' || format === 'unsigned' || format === 'hex' || format === 'opcodes') this.format = format;
+  }
+
+  private persistSettings(): void {
+    saveSettings({
+      detailed: this.detailed,
+      animations: this.animations,
+      extended: this.extended,
+      hexAddresses: this.hexAddresses,
+      followPc: this.followPc,
+      beamer: this.beamer,
+      speedIndex: this.speedIndex,
+      limitSeconds: this.limitSeconds,
+      theme: this.theme,
+      format: this.format,
+    });
   }
 
   // ==================================================================
@@ -431,6 +623,8 @@ export class App {
   }
 
   private onSourceChanged(): void {
+    window.clearTimeout(this.autosaveTimer);
+    this.autosaveTimer = window.setTimeout(() => saveSource(this.editor.getText()), 400);
     if (this.session.program && !this.programStale) {
       this.programStale = true;
       this.setStatus(`Das Programm wurde geändert. Zum Ausführen der neuen Fassung zuerst assemblieren (${KEYS.assemble}).`, 'warning');
@@ -450,10 +644,19 @@ export class App {
   // View settings
   // ==================================================================
 
-  private setExtended(on: boolean): void {
+  /** @param quiet true when switched on automatically (example/link): no status message */
+  private setExtended(on: boolean, quiet = false): void {
     this.extended = on;
     this.diagram.setExtended(on);
     this.spButton.hidden = !on;
+    const box = document.querySelector<HTMLInputElement>('.extended-box');
+    if (box) box.checked = on;
+    this.persistSettings();
+    if (quiet) {
+      if (this.session.program) this.programStale = true;
+      this.render();
+      return;
+    }
     if (this.session.program) {
       this.programStale = true;
       this.setStatus(on
@@ -493,7 +696,9 @@ export class App {
   }
 
   private toggleBeamer(): void {
-    document.documentElement.classList.toggle('beamer');
+    this.beamer = !this.beamer;
+    document.documentElement.classList.toggle('beamer', this.beamer);
+    this.persistSettings();
     this.render();
   }
 
@@ -501,6 +706,7 @@ export class App {
     const order: Theme[] = ['auto', 'light', 'dark'];
     this.theme = order[(order.indexOf(this.theme) + 1) % order.length] ?? 'auto';
     this.applyTheme();
+    this.persistSettings();
   }
 
   private applyTheme(): void {
@@ -511,6 +717,12 @@ export class App {
   }
 
   private onKey(ev: KeyboardEvent): void {
+    if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && (ev.key === 's' || ev.key === 'o')) {
+      ev.preventDefault(); // instead of the browser's "save page" / "open file"
+      if (ev.key === 's') void this.saveProgram();
+      else void this.openProgram();
+      return;
+    }
     const actions: Record<string, () => void> = {
       F9: () => this.assemble(false),
       'Shift+F9': () => this.assemble(true),

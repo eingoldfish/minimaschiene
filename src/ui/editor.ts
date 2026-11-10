@@ -100,6 +100,8 @@ class BreakpointMarker extends GutterMarker {
 }
 const breakpointMarker = new BreakpointMarker();
 
+const clearBreakpointsEffect = StateEffect.define<null>();
+
 const toggleBreakpointEffect = StateEffect.define<{ pos: number; on: boolean }>({
   map: (value, mapping) => ({ pos: mapping.mapPos(value.pos), on: value.on }),
 });
@@ -110,6 +112,7 @@ const breakpointField = StateField.define<RangeSet<GutterMarker>>({
   update(set, tr) {
     let result = set.map(tr.changes);
     for (const effect of tr.effects) {
+      if (effect.is(clearBreakpointsEffect)) result = RangeSet.empty;
       if (!effect.is(toggleBreakpointEffect)) continue;
       const { pos, on } = effect.value;
       result = on
@@ -321,7 +324,11 @@ export function createEditor(parent: HTMLElement, initialText: string, callbacks
     getText: () => view.state.doc.toString(),
 
     setText(text) {
-      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+      // A new program: old breakpoints and the undo history no longer fit.
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: text },
+        effects: clearBreakpointsEffect.of(null),
+      });
     },
 
     setErrors(errors) {

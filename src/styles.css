@@ -972,3 +972,26 @@ button.is-busy {
   stroke-width: 2;
   stroke-dasharray: 4 3;
 }
+
+/* ---------- File bar above the editor ---------- */
+.file-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.file-bar select {
+  font-size: 0.9rem;
+  max-width: 11rem;
+}
+
+.file-name {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
