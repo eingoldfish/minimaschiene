@@ -6,3 +6,6 @@ coverage/
 
 # Manual-PDFs (lokale Referenz, nicht versionieren)
 aWiedemann/
+
+# Dekompilierte Originalquellen (lokale Referenz, urheberrechtlich geschützt, nicht versionieren)
+decompiled_app_old/
