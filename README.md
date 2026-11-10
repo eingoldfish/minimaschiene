@@ -2,7 +2,7 @@
 
 Ein moderner, im Browser laufender CPU-Simulator nach dem Vorbild der **Minimaschine 4.0** (A. Wiedemann): eine 16-Bit-Akkumulatormaschine für den Informatikunterricht (LehrplanPLUS Bayern, Jgst. 12/13). Eigenständige Neuimplementierung – nur das dokumentierte Verhalten wird nachgebildet.
 
-**Stand:** Meilenstein M2 – Befehlssatz, CPU, Assembler und Disassembler für den Standardmodus mit Tests. Die Oberfläche zeigt noch Platzhalter.
+**Stand:** Meilenstein M3 – Grund-Oberfläche: Editor (CodeMirror 6) mit Fehlermarkierung, Haltepunkten und Hilfe, Register- und Speicheranzeige, Schritt / Schritt zurück / Ausführen. Es fehlen noch Mikroschritte (M4), erweiterter Modus (M5) und Speichern/Teilen/Offline (M6).
 
 ## Voraussetzungen
 
@@ -26,6 +26,23 @@ Alle Befehle im Projektordner ausführen (dem Ordner, in dem diese `README.md` l
 | `npm run build` | Produktionsversion nach `dist/` bauen |
 | `npm run preview` | Gebaute Version lokal ansehen |
 
+## Abhängigkeiten
+
+| Paket | Wozu |
+|---|---|
+| `@codemirror/*`, `@lezer/highlight` | Code-Editor mit Zeilennummern, Rückgängig, Hervorhebung, Fehlermarkierung und Tooltips (in den Projekt-Instruktionen ausdrücklich erlaubt) |
+| `typescript`, `vite`, `vitest` (nur Entwicklung) | Übersetzen, Entwicklungsserver/Build, Tests |
+
+## Tastenkürzel
+
+| Taste | Wirkung |
+|---|---|
+| F9 / Umschalt+F9 | Assemblieren / … und Speicher behalten |
+| F10 / Umschalt+F10 | Schritt / Schritt zurück |
+| F5 | Ausführen bzw. Pause (auch Esc hält an) |
+
+Auf dem Mac ggf. zusätzlich die `fn`-Taste drücken.
+
 ## Projektstruktur
 
 ```
@@ -42,6 +59,12 @@ src/
     format.ts       Zahlendarstellung (signed/unsigned/hex/binär)
     index.ts        Öffentliche API des Cores
   ui/               Oberfläche (nutzt nur src/core/index.ts)
+    app.ts          Aufbau der Seite, Knöpfe, Tastenkürzel, Programmlauf
+    session.ts      Steuerlogik ohne DOM (Assemblieren, Schritt, Haltepunkte) – getestet
+    editor.ts       Code-Editor (CodeMirror 6)
+    machineView.ts  Anzeige der Register und Flags
+    memoryView.ts   Speichertabelle (nur sichtbare Zeilen werden gezeichnet)
+    dom.ts, texts.ts, examples.ts  Hilfsfunktionen, Texte, Beispielprogramm
   storage/          localStorage, Dateien, Teilen-Link (ab M6)
 tests/              Vitest-Tests
 docs/

@@ -49,6 +49,25 @@ export function toBinary16(value: number): string {
   return bits.replace(/(.{4})(?=.)/g, '$1 ');
 }
 
+/**
+ * Parses a number typed by the user (e.g. when editing memory):
+ * decimal ("42", "-7") or hex ("0x2A"). Returns the unsigned 16-bit value,
+ * or null if the text is not a valid number in −32768 … 65535.
+ */
+export function parseWord(text: string): number | null {
+  const t = text.trim();
+  let value: number;
+  if (/^-?[0-9]+$/.test(t)) {
+    value = parseInt(t, 10);
+  } else if (/^0[xX][0-9A-Fa-f]+$/.test(t)) {
+    value = parseInt(t.slice(2), 16);
+  } else {
+    return null;
+  }
+  if (value < -0x8000 || value > WORD_MASK) return null;
+  return toUnsigned16(value);
+}
+
 /** Formats a word according to the chosen display format. */
 export function formatWord(value: number, format: NumberFormat): string {
   switch (format) {

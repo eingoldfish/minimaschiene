@@ -173,6 +173,13 @@ describe('error messages', () => {
     expect(r.errors[0]).toMatchObject({ column: 5, length: 4 });
   });
 
+  it('suggests a similar label for typos', () => {
+    expect(errs('Schleife: JMP Schleifex')[0]).toBe(
+      '1:15 Die Marke ‚Schleifex‘ wird benutzt, aber nirgends festgelegt. Meintest du ‚Schleife‘? Oder hast du ‚Schleifex:‘ vergessen?',
+    );
+    expect(errs('Start: JMP Ende')[0]).toMatch(/Hast du ‚Ende:‘ vergessen\?$/); // not similar
+  });
+
   it('suggests a label that differs only in case', () => {
     expect(errs('ende: HALT\nJMP Ende')[0]).toContain('Meintest du ‚ende‘?');
   });

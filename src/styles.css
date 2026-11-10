@@ -1,37 +1,117 @@
-/* ---------- Color tokens (light default) ---------- */
+/* =====================================================================
+   Minimaschine Web – styles
+   All sizes in rem, so the "Beamer" mode only has to change the root
+   font size. All colours are CSS variables (light/dark mode).
+   ===================================================================== */
+
+/* ---------- Colour tokens (light) ---------- */
 :root {
-  color-scheme: light dark;
-  --bg: #f6f7f9;
+  color-scheme: light;
+  --bg: #f4f5f7;
   --surface: #ffffff;
-  --border: #d5d9e0;
+  --surface-2: #f0f2f5;
+  --border: #d3d8df;
   --text: #1b1f24;
   --text-muted: #5b6470;
-  --accent: #1f6feb;
+  --accent: #1f5fd1;
   --accent-text: #ffffff;
+  --accent-soft: #e3ecfc;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --success: #1a7f37;
+  --success-soft: #e6f4ea;
+  --warning: #9a6700;
+  --warning-soft: #fff4d6;
+  --selection: #c9dafc;
+  --active-line: #f6f8fb;
+  --exec-bg: #fff1b8;
+  --exec-border: #e0b400;
+  --pc-bg: #fff1b8;
+  --written-bg: #ffd9cc;
+  --written-border: #e8590c;
+  --lamp-on: #e8590c;
+  --syn-keyword: #1f5fd1;
+  --syn-comment: #6a737d;
+  --syn-number: #8250df;
+  --syn-label: #0b7a5c;
+  --syn-operator: #9a3412;
   --radius: 8px;
-  --gap: 16px;
+  --gap: 1rem;
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --mem-row-h: 2.6rem; /* must match ROW_REM in memoryView.ts */
+  font-size: 16px;
 }
 
-/* Dark mode: follows the OS setting unless the user forced light mode. */
+/* ---------- Dark ---------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
+    color-scheme: dark;
     --bg: #0f1216;
-    --surface: #181c22;
-    --border: #2d333b;
+    --surface: #171b21;
+    --surface-2: #1e232b;
+    --border: #2f3640;
     --text: #e6e9ee;
     --text-muted: #9aa4b1;
-    --accent: #4c8dff;
+    --accent: #5b9bff;
+    --accent-text: #0b0e12;
+    --accent-soft: #1b2b45;
+    --danger: #ff7b72;
+    --danger-soft: #3b1715;
+    --success: #56d364;
+    --success-soft: #12301a;
+    --warning: #e3b341;
+    --warning-soft: #3a2e0c;
+    --selection: #26416b;
+    --active-line: #1b2027;
+    --exec-bg: #4a3d0a;
+    --exec-border: #c9a227;
+    --pc-bg: #4a3d0a;
+    --written-bg: #4d2414;
+    --written-border: #ff8a50;
+    --lamp-on: #ff8a50;
+    --syn-keyword: #79b0ff;
+    --syn-comment: #8b949e;
+    --syn-number: #d2a8ff;
+    --syn-label: #5ad6a8;
+    --syn-operator: #ffa657;
   }
 }
 :root[data-theme='dark'] {
+  color-scheme: dark;
   --bg: #0f1216;
-  --surface: #181c22;
-  --border: #2d333b;
+  --surface: #171b21;
+  --surface-2: #1e232b;
+  --border: #2f3640;
   --text: #e6e9ee;
   --text-muted: #9aa4b1;
-  --accent: #4c8dff;
+  --accent: #5b9bff;
+  --accent-text: #0b0e12;
+  --accent-soft: #1b2b45;
+  --danger: #ff7b72;
+  --danger-soft: #3b1715;
+  --success: #56d364;
+  --success-soft: #12301a;
+  --warning: #e3b341;
+  --warning-soft: #3a2e0c;
+  --selection: #26416b;
+  --active-line: #1b2027;
+  --exec-bg: #4a3d0a;
+  --exec-border: #c9a227;
+  --pc-bg: #4a3d0a;
+  --written-bg: #4d2414;
+  --written-border: #ff8a50;
+  --lamp-on: #ff8a50;
+  --syn-keyword: #79b0ff;
+  --syn-comment: #8b949e;
+  --syn-number: #d2a8ff;
+  --syn-label: #5ad6a8;
+  --syn-operator: #ffa657;
+}
+
+/* Beamer: everything bigger */
+:root.beamer {
+  font-size: 21px;
 }
 
 /* ---------- Base ---------- */
@@ -46,67 +126,191 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
 h1 {
-  font-size: 1.4rem;
+  font-size: 1.35rem;
   margin: 0;
 }
 
 h2 {
-  font-size: 1.1rem;
-  margin: 0 0 8px;
+  font-size: 1.05rem;
+  margin: 0;
 }
 
-/* ---------- Header & toolbar ---------- */
+.mono {
+  font-family: var(--font-mono);
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.7em;
+  color: var(--text-muted);
+  margin-left: 0.4em;
+}
+
+/* ---------- Buttons & inputs ---------- */
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+button.primary kbd {
+  color: inherit;
+  opacity: 0.8;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.1);
+}
+
+button.is-running {
+  background: var(--warning);
+  border-color: var(--warning);
+}
+
+button.subtle {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+button.small {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.9rem;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+select,
+input[type='number'],
+.goto-input {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.limit-input {
+  width: 4.2rem;
+}
+
+.goto-input {
+  width: 7rem;
+}
+
+.btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.field,
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.check.disabled {
+  opacity: 0.5;
+}
+
+/* ---------- Header ---------- */
 .app-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem var(--gap);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.title-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--gap);
-  padding: 12px var(--gap);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.view-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1rem;
 }
 
 .toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 0.6rem 1.5rem;
 }
 
-.toolbar button {
-  font: inherit;
-  padding: 8px 14px;
-  border: 1px solid var(--border);
+/* ---------- Status line ---------- */
+.status {
+  margin: var(--gap) var(--gap) 0;
+  padding: 0.55rem 0.9rem;
   border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
 }
 
-.toolbar button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+.status-success {
+  border-color: var(--success);
+  background: var(--success-soft);
 }
 
-.toolbar button:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
+.status-warning {
+  border-color: var(--warning);
+  background: var(--warning-soft);
 }
 
-kbd {
-  font-family: var(--font-mono);
-  font-size: 0.75em;
-  color: var(--text-muted);
+.status-error {
+  border-color: var(--danger);
+  background: var(--danger-soft);
 }
 
 /* ---------- Main grid: editor left, machine right, memory below ---------- */
 .app-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
   grid-template-areas:
     'editor machine'
     'memory memory';
@@ -115,11 +319,22 @@ kbd {
 }
 
 .panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: var(--gap);
-  min-height: 200px;
+  padding: 0.9rem var(--gap);
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .panel-editor {
@@ -132,23 +347,12 @@ kbd {
   grid-area: memory;
 }
 
-.placeholder {
+.hint {
+  margin: 0;
+  font-size: 0.85rem;
   color: var(--text-muted);
 }
 
-.registers {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 4px 16px;
-  margin: 0;
-}
-
-.registers dd {
-  margin: 0;
-  font-family: var(--font-mono);
-}
-
-/* Small screens: everything stacked */
 @media (max-width: 900px) {
   .app-main {
     grid-template-columns: minmax(0, 1fr);
@@ -156,5 +360,335 @@ kbd {
       'editor'
       'machine'
       'memory';
+  }
+}
+
+/* ---------- Editor ---------- */
+.editor-host {
+  height: 26rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.cm-exec-line {
+  background: var(--exec-bg) !important;
+  box-shadow: inset 4px 0 0 var(--exec-border);
+}
+
+.cm-exec-error {
+  background: var(--danger-soft) !important;
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+
+.cm-breakpoint-dot {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.cm-help {
+  max-width: 24rem;
+  padding: 0.5rem 0.7rem;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.cm-help p {
+  margin: 0.3rem 0;
+}
+
+.cm-help .cm-help-flags {
+  color: var(--text-muted);
+}
+
+.cm-help code {
+  display: block;
+  font-family: var(--font-mono);
+  color: var(--syn-keyword);
+}
+
+.error-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.error-item {
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.error-item:hover:not(:disabled) {
+  background: var(--danger-soft);
+  filter: brightness(0.97);
+}
+
+.error-hint {
+  color: var(--text-muted);
+}
+
+/* ---------- Machine ---------- */
+.machine {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.7rem;
+}
+
+.reg {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.reg-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+.reg-value {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.reg-ir .reg-value {
+  font-size: 1.3rem;
+}
+
+.reg-note,
+.reg-detail {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.reg-detail .mono {
+  letter-spacing: 0.04em;
+}
+
+.flags {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}
+
+.flag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 2.4rem;
+  padding: 0.2rem 0.3rem;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  cursor: help;
+}
+
+.flag-name {
+  font-weight: 700;
+}
+
+.flag-value {
+  font-size: 0.85rem;
+}
+
+.flag.on {
+  border-color: var(--lamp-on);
+  background: var(--lamp-on);
+  color: #fff;
+}
+
+.machine-state {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+}
+
+.machine-state.halted strong {
+  color: var(--warning);
+}
+
+/* ---------- Memory ---------- */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segmented label {
+  position: relative;
+}
+
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented span {
+  display: block;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.segmented input:checked + span {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.segmented input:focus-visible + span {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.mem-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.mem-table {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.mem-row {
+  display: grid;
+  grid-template-columns: 5rem repeat(10, minmax(4.6rem, 1fr));
+  height: var(--mem-row-h);
+  min-width: 52rem;
+}
+
+.mem-header {
+  height: 1.8rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.mem-header span {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 0.5rem;
+}
+
+.mem-viewport {
+  height: calc(var(--mem-row-h) * 12);
+  overflow-y: auto;
+  min-width: 52rem;
+}
+
+.mem-spacer {
+  position: relative;
+}
+
+.mem-rows {
+  position: absolute;
+  inset: 0 0 auto 0;
+}
+
+.mem-addr {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 0.6rem;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.mem-cell {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0 0.45rem 0.3rem;
+  border: none;
+  border-right: 1px solid var(--surface-2);
+  border-bottom: 1px solid var(--surface-2);
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  overflow: hidden;
+}
+
+.mem-cell:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.mem-cell.is-pc {
+  background: var(--pc-bg);
+}
+
+.mem-cell.is-written {
+  background: var(--written-bg);
+  box-shadow: inset 0 0 0 2px var(--written-border);
+}
+
+.mem-label {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.35rem;
+  right: 0.35rem;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  color: var(--syn-label);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mem-cell.is-editing {
+  align-items: center;
+  padding: 0.2rem;
+}
+
+.mem-input {
+  width: 100%;
+  padding: 0.15rem 0.3rem;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.mem-input.invalid {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mem-cell,
+  .flag {
+    transition: background-color 0.15s;
+  }
+}
+
+/* Phones/tablets without keyboard: hide shortcut hints */
+@media (max-width: 600px), (pointer: coarse) {
+  kbd {
+    display: none;
   }
 }

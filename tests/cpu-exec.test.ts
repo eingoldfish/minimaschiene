@@ -193,3 +193,40 @@ describe('example program from manual 3.2 (multiplication by repeated addition)'
     expect(cpu.getState().memory[FAKTOR1]).toBe(2);
   });
 });
+
+describe('stepUndoable / undo ("Schritt zurück" without full snapshots)', () => {
+  it('restores registers, flags and written memory cells', () => {
+    const cpu = cpuWith([ins('LOADI', 5), ins('STORE', 30), ins('ADDI', 1), ins('STORE', 30), ins('HALT')], { 30: 99 });
+    const states = [cpu.snapshot()];
+    const records = [];
+    while (cpu.getState().halted === 'none') {
+      records.push(cpu.stepUndoable().undo);
+      states.push(cpu.snapshot());
+    }
+    expect(cpu.getState().memory[30]).toBe(6);
+    // undo everything, comparing with the saved full snapshots
+    for (let i = records.length - 1; i >= 0; i--) {
+      cpu.undo(records[i]!);
+      expect(cpu.snapshot()).toEqual(states[i]);
+    }
+    expect(cpu.getState().memory[30]).toBe(99);
+  });
+
+  it('records only memory writes, not reads', () => {
+    const cpu = cpuWith([ins('LOAD', 30)], { 30: 1 });
+    expect(cpu.stepUndoable().undo.writes).toEqual([]);
+  });
+});
+
+describe('lastWrite', () => {
+  it('stays on the last written cell until the next write', () => {
+    const cpu = cpuWith([ins('LOADI', 1), ins('STORE', 30), ins('LOADI', 2), ins('STORE', 31)]);
+    cpu.step();
+    expect(cpu.getState().lastWrite).toBeNull();
+    cpu.step();
+    cpu.step();
+    expect(cpu.getState().lastWrite).toBe(30);
+    cpu.step();
+    expect(cpu.getState().lastWrite).toBe(31);
+  });
+});

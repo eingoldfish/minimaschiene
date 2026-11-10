@@ -94,6 +94,9 @@ Vorbelegung der Flags mit `CMPI` (C=1/N=1 bzw. V=1), dann der Befehl.
 
 ## Bewusste Neuerungen gegenüber dem Original
 
+- **Abbruchschranke** (M3): Sie greift nur beim Tempo „Maximal“. Bei langsamem Tempo sieht man das Programm laufen und kann jederzeit „Pause“ drücken; eine Zeitgrenze würde dort längere, aber korrekte Programme abbrechen.
+- **Hervorhebung nach HALT** (M3): Der PC zeigt nach `HALT` hinter den Befehl (Punkt 13). Im Editor wird trotzdem die `HALT`-Zeile markiert, weil die nächste Zeile oft schon Daten sind.
+- **Zuletzt geänderte Zelle** (M3): bleibt markiert, bis die nächste Zelle geschrieben wird (durch `STORE` oder durch Bearbeiten im Speicher).
 - **Opcode-Ansicht** (Disassembler): Befehle werden in Eingabesyntax angezeigt, also `LOAD (11)` statt `LOAD @ 11` wie im Original, damit man sie direkt in den Editor kopieren kann. Auf Wunsch erscheinen Marken statt Adressen (`JMP Start`). Immediate-Werte werden mit Vorzeichen gezeigt (`LOADI -7`).
 - Schritt zurück, Haltepunkte, Marken neben Speicherzellen, animierte Mikroschritte mit Erklärtext (siehe Projekt-Instruktionen, Abschnitt 6).
 - **Division durch 0** (Vorschlag, Punkt 5): Die Maschine hält an, statt zurückzusetzen. Akku, Flags und Speicher bleiben unverändert, und der PC zeigt auf den auslösenden Befehl, damit man den Fehler untersuchen und mit „Schritt zurück“ zurückgehen kann. Die Meldung erscheint in der Oberfläche (Statuszeile, Befehl rot markiert), nicht als Browser-Pop-up, zum Beispiel: „Division durch 0 bei Adresse 6 (DIVI 0) – Programm angehalten.“ Das betrifft alle sechs Divisions- und Modulobefehle samt Immediate-Varianten.

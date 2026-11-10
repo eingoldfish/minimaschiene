@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatWord, toBinary16, toHex16, toSigned16, toUnsigned16 } from '../src/core';
+import { formatWord, parseWord, toBinary16, toHex16, toSigned16, toUnsigned16 } from '../src/core';
 
 describe('toUnsigned16', () => {
   it('keeps values in range', () => {
@@ -46,5 +46,20 @@ describe('formatWord', () => {
     expect(formatWord(0xffff, 'signed')).toBe('-1');
     expect(formatWord(0xffff, 'unsigned')).toBe('65535');
     expect(formatWord(0xffff, 'hex')).toBe('0xFFFF');
+  });
+});
+
+describe('parseWord', () => {
+  it('reads decimal, negative and hex numbers', () => {
+    expect(parseWord('42')).toBe(42);
+    expect(parseWord(' -1 ')).toBe(0xffff);
+    expect(parseWord('0x2a')).toBe(42);
+    expect(parseWord('65535')).toBe(65535);
+    expect(parseWord('-32768')).toBe(0x8000);
+  });
+  it('rejects invalid input and numbers out of range', () => {
+    for (const t of ['', 'abc', '1.5', '0x', '65536', '-32769', '5 6']) {
+      expect(parseWord(t), t).toBeNull();
+    }
   });
 });

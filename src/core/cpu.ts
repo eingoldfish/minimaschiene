@@ -49,7 +49,7 @@ export interface CpuState {
   flags: Flags;
   memory: Uint16Array;
   halted: HaltReason;
-  /** Address of the memory cell written by the last instruction, or null. */
+  /** Address of the memory cell written most recently (by STORE or the user), or null. */
   lastWrite: number | null;
 }
 
@@ -71,6 +71,20 @@ export interface MicroStepEvent {
   transfers: BusTransfer[];
   /** Key of a German explanation text (texts live in the UI). */
   explanationKey: string;
+}
+
+/** Everything in CpuState except the memory. */
+export type CpuRegisters = Omit<CpuState, 'memory'>;
+
+/**
+ * Information to undo one step ("Schritt zurück"): the registers before the
+ * step plus the old values of all memory cells the step wrote.
+ * Much smaller than a full snapshot (128 KB), so we can keep many of them.
+ */
+export interface UndoRecord {
+  registers: CpuRegisters;
+  /** [address, old value] in the order they were written. */
+  writes: Array<[number, number]>;
 }
 
 /** Result of run(). 'limit' means the step limit was reached (endless loop?). */
@@ -135,6 +149,8 @@ const ALU_INSTRUCTIONS: Readonly<Record<string, AluOp>> = {
 
 export class Cpu {
   private state: CpuState = createInitialState();
+  /** While a step is recorded for undo, memory writes are logged here. */
+  private writeLog: Array<[number, number]> | null = null;
 
   /** Read-only view of the current state (UI must not mutate it). */
   getState(): Readonly<CpuState> {
@@ -187,7 +203,6 @@ export class Cpu {
     // ----- decode -----
     const decoded = decodeWord1(word1);
     s.ir = { opcode: word1 & 0xff, mode: decoded?.mode ?? null, address: word2 };
-    s.lastWrite = null;
     if (!decoded) {
       // TODO(compat): behaviour of the original on illegal codes not yet verified.
       s.halted = 'illegalOpcode';
@@ -203,6 +218,46 @@ export class Cpu {
       s.pc = instructionAddress;
     }
     return s.halted;
+  }
+
+  /**
+   * Like step(), but also returns the information needed to undo it.
+   */
+  stepUndoable(): { reason: HaltReason; undo: UndoRecord } {
+    const s = this.state;
+    const undo: UndoRecord = {
+      registers: {
+        a: s.a,
+        pc: s.pc,
+        sp: s.sp,
+        ir: { ...s.ir },
+        flags: { ...s.flags },
+        halted: s.halted,
+        lastWrite: s.lastWrite,
+      },
+      writes: [],
+    };
+    this.writeLog = undo.writes;
+    try {
+      return { reason: this.step(), undo };
+    } finally {
+      this.writeLog = null;
+    }
+  }
+
+  /** Reverts a step recorded with stepUndoable(). Undo records must be applied newest first. */
+  undo(record: UndoRecord): void {
+    for (let i = record.writes.length - 1; i >= 0; i--) {
+      const [address, oldValue] = record.writes[i]!;
+      this.state.memory[address] = oldValue;
+    }
+    const r = record.registers;
+    this.state = {
+      ...r,
+      ir: { ...r.ir },
+      flags: { ...r.flags },
+      memory: this.state.memory,
+    };
   }
 
   /**
@@ -319,6 +374,7 @@ export class Cpu {
       }
       case 'STORE': {
         const target = this.effectiveAddress(mode, address);
+        this.writeLog?.push([target, s.memory[target] ?? 0]);
         s.memory[target] = s.a;
         s.lastWrite = target;
         return;

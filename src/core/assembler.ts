@@ -398,19 +398,24 @@ function editDistance(a: string, b: string): number {
   return at(a.length, b.length);
 }
 
-/** Closest known mnemonic, if it is similar enough. */
-function suggestMnemonic(name: string): string | undefined {
-  const upper = name.toUpperCase();
+/** Closest candidate with at most 2 changes (and not shorter than 3 letters), if any. */
+function closest(name: string, candidates: Iterable<string>): string | undefined {
+  if (name.length < 3) return undefined;
   let best: string | undefined;
-  let bestDist = 3; // only suggest for at most 2 changes
-  for (const candidate of allMnemonicNames()) {
-    const d = editDistance(upper, candidate);
+  let bestDist = 3;
+  for (const candidate of candidates) {
+    const d = editDistance(name, candidate);
     if (d < bestDist) {
       best = candidate;
       bestDist = d;
     }
   }
   return best;
+}
+
+/** Closest known mnemonic, if it is similar enough. */
+function suggestMnemonic(name: string): string | undefined {
+  return closest(name.toUpperCase(), allMnemonicNames());
 }
 
 const SYNTAX_EXAMPLE: Record<OperandSyntax, string> = {
@@ -499,12 +504,15 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
     if (v.kind === 'label') {
       const addr = labels.get(v.name);
       if (addr !== undefined) return addr;
-      const similar = [...labels.keys()].find((l) => l.toLowerCase() === v.name.toLowerCase());
+      const sameLetters = [...labels.keys()].find((l) => l.toLowerCase() === v.name.toLowerCase());
+      const typo = sameLetters ? undefined : closest(v.name, [...labels.keys()]);
       err(line, operand.column, operand.length,
         `Die Marke ‚${v.name}‘ wird benutzt, aber nirgends festgelegt.`,
-        similar
-          ? `Meintest du ‚${similar}‘? Bei Marken wird zwischen Groß- und Kleinschreibung unterschieden.`
-          : `Hast du ‚${v.name}:‘ vergessen?`);
+        sameLetters
+          ? `Meintest du ‚${sameLetters}‘? Bei Marken wird zwischen Groß- und Kleinschreibung unterschieden.`
+          : typo
+            ? `Meintest du ‚${typo}‘? Oder hast du ‚${v.name}:‘ vergessen?`
+            : `Hast du ‚${v.name}:‘ vergessen?`);
       return 0;
     }
     const n = v.negative ? -v.value : v.value;
