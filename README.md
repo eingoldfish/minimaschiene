@@ -2,7 +2,7 @@
 
 Ein moderner, im Browser laufender CPU-Simulator nach dem Vorbild der **Minimaschine 4.0** (A. Wiedemann): eine 16-Bit-Akkumulatormaschine für den Informatikunterricht (LehrplanPLUS Bayern, Jgst. 12/13). Eigenständige Neuimplementierung – nur das dokumentierte Verhalten wird nachgebildet.
 
-**Stand:** Meilenstein M1 – Befehlssatz (`isa.ts`, `alu.ts`) und CPU (`cpu.ts`) für den Standardmodus mit Tests. Die Oberfläche zeigt noch Platzhalter.
+**Stand:** Meilenstein M2 – Befehlssatz, CPU, Assembler und Disassembler für den Standardmodus mit Tests. Die Oberfläche zeigt noch Platzhalter.
 
 ## Voraussetzungen
 

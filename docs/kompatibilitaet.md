@@ -24,6 +24,9 @@ Status: **offen** = noch nicht geklärt · **Annahme** = so umgesetzt, aber nich
 | 12 | Ungültiger Befehlscode (unbekannter Opcode oder unbekannte Adressierungsart in Wort 1) | Annahme (M1) | Maschine hält an, der PC bleibt auf dem ungültigen Befehl. Als ungültig gilt auch eine Adressierungsart, die der Befehl nicht erlaubt (z. B. `STORE` immediate = 0x0215, `NOT` mit Art 1, Sprünge mit Art 2/3). Prüfbar mit Speicher-Editieren im Original. |
 | 13 | PC nach `HALT` | Annahme (M1) | Der PC zeigt hinter den `HALT`-Befehl (normaler Befehlszyklus: PC wird beim Holen um 2 erhöht). |
 | 14 | Indirekte Sprünge (`JMP (adr)`) | Annahme (M1) | Nicht erlaubt; Sprünge kennen nur direkte Adressen. Im Original prüfen, ob der Assembler `JMP (10)` annimmt. |
+| 15 | Groß-/Kleinschreibung bei Marken | Annahme (M2) | Marken unterscheiden Groß- und Kleinschreibung (`Ende` ≠ `ende`), Befehle nicht. Bei einem Treffer, der sich nur in der Schreibweise unterscheidet, gibt der Assembler einen Hinweis. Im Original prüfen. |
+| 16 | Befehlsnamen als Marken | Annahme (M2) | Nicht erlaubt (z. B. `load:`, `word:`, `sp:`), auch keine Namen der Stackbefehle. |
+| 17 | Negative Zahlen und Marken als Zahlenwert | Annahme (M2) | Negative Zahlen (−32768 … −1) gibt es nur bei Immediate (`LOADI -7`, `ADD $-1`) und `WORD`. Eine negative Adresse (`LOAD -1`) ist ein Fehler. `LOADI Marke` und `WORD Marke` sind erlaubt und liefern die Adresse der Marke. |
 
 ## Opcode-Tabelle (am Original ermittelt)
 
@@ -91,6 +94,7 @@ Vorbelegung der Flags mit `CMPI` (C=1/N=1 bzw. V=1), dann der Befehl.
 
 ## Bewusste Neuerungen gegenüber dem Original
 
+- **Opcode-Ansicht** (Disassembler): Befehle werden in Eingabesyntax angezeigt, also `LOAD (11)` statt `LOAD @ 11` wie im Original, damit man sie direkt in den Editor kopieren kann. Auf Wunsch erscheinen Marken statt Adressen (`JMP Start`). Immediate-Werte werden mit Vorzeichen gezeigt (`LOADI -7`).
 - Schritt zurück, Haltepunkte, Marken neben Speicherzellen, animierte Mikroschritte mit Erklärtext (siehe Projekt-Instruktionen, Abschnitt 6).
 - **Division durch 0** (Vorschlag, Punkt 5): Die Maschine hält an, statt zurückzusetzen. Akku, Flags und Speicher bleiben unverändert, und der PC zeigt auf den auslösenden Befehl, damit man den Fehler untersuchen und mit „Schritt zurück“ zurückgehen kann. Die Meldung erscheint in der Oberfläche (Statuszeile, Befehl rot markiert), nicht als Browser-Pop-up, zum Beispiel: „Division durch 0 bei Adresse 6 (DIVI 0) – Programm angehalten.“ Das betrifft alle sechs Divisions- und Modulobefehle samt Immediate-Varianten.
 - **Befehl `RESET`** (Punkt 7): Setzt wie der Knopf „Zurücksetzen“ Akku, PC, Befehlsregister und Flags auf 0 und hält die Maschine an. Anders als im Original **bleibt der Speicher erhalten**. Begründung: Für Anfänger wäre es verwirrend, wenn das eigene Programm aus dem Speicher verschwindet. Die Statuszeile meldet: „Programm hat RESET ausgeführt – Maschine zurückgesetzt und angehalten.“

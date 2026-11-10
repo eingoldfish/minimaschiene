@@ -199,6 +199,33 @@ for (const def of INSTRUCTIONS) {
   }
 }
 
+/**
+ * Mnemonics of the extended mode (stack). Not yet in INSTRUCTIONS because
+ * their opcodes are still unknown (M5); listed here for helpful error messages.
+ */
+export const EXTENDED_MNEMONICS: readonly string[] = [
+  'JSR', 'CALL', 'RTS', 'RETURN', 'PUSH', 'POP', 'RSV', 'REL',
+];
+
+/** Pseudo instruction that reserves one memory cell. */
+export const WORD_DIRECTIVE = 'WORD';
+
+/** All names the assembler knows (upper case), e.g. for suggestions on typos. */
+export function allMnemonicNames(): string[] {
+  return [...BY_MNEMONIC.keys(), WORD_DIRECTIVE];
+}
+
+/** True if `name` is reserved and therefore cannot be used as a label. */
+export function isReservedName(name: string): boolean {
+  const upper = name.toUpperCase();
+  return (
+    BY_MNEMONIC.has(upper) ||
+    EXTENDED_MNEMONICS.includes(upper) ||
+    upper === WORD_DIRECTIVE ||
+    upper === 'SP'
+  );
+}
+
 /** Finds an instruction by mnemonic, alias or "…I" short form (case-insensitive). */
 export function lookupMnemonic(name: string): MnemonicLookup | undefined {
   return BY_MNEMONIC.get(name.toUpperCase());
