@@ -21,6 +21,9 @@ Status: **offen** = noch nicht geklärt · **Annahme** = so umgesetzt, aber nich
 | 9 | Dateiendung für Assemblerdateien | offen | Vermutlich `.mia` – Bestätigung ausstehend. |
 | 10 | Shifts um ≥ 16 Stellen | geklärt (Test 4) | **Schiebeweite modulo 32, gerechnet auf 32 Bit, Ergebnis auf 16 Bit abgeschnitten** (wie JavaScript `<<`, `>>>`, `>>`). `5 SHLI 16` = 0, `5 SHLI 17` = 0, `5 SHLI 100` = 80 (100 mod 32 = 4), `5 SHLI -1` = 0 (−1 mod 32 = 31), `-1 SHRI 16` = 0, `-32768 SHRAI 16` = −1, `-32768 SHRAI 15` = −1, `5 SHLI 0` = 5. Weder Modulo 16 noch Fehlermeldung. |
 | 11 | Speicherlayout beim Assemblieren | beobachtet (Test 2) | Die Befehle liegen ab Adresse 0 lückenlos mit je 2 Worten, `WORD`-Zellen schließen direkt an. In Test 2 wurde `STORE schritt` zu Adresse 75 übersetzt (37 Befehle = 74 Worte, `null` = 74, `schritt` = 75). Mit auskommentierten Fällen ergaben sich andere Adressen, z. B. 73. Exakte Adressgleichheit mit dem Original ist kein Muss, wird aber notiert. |
+| 12 | Ungültiger Befehlscode (unbekannter Opcode oder unbekannte Adressierungsart in Wort 1) | Annahme (M1) | Maschine hält an, der PC bleibt auf dem ungültigen Befehl. Als ungültig gilt auch eine Adressierungsart, die der Befehl nicht erlaubt (z. B. `STORE` immediate = 0x0215, `NOT` mit Art 1, Sprünge mit Art 2/3). Prüfbar mit Speicher-Editieren im Original. |
+| 13 | PC nach `HALT` | Annahme (M1) | Der PC zeigt hinter den `HALT`-Befehl (normaler Befehlszyklus: PC wird beim Holen um 2 erhöht). |
+| 14 | Indirekte Sprünge (`JMP (adr)`) | Annahme (M1) | Nicht erlaubt; Sprünge kennen nur direkte Adressen. Im Original prüfen, ob der Assembler `JMP (10)` annimmt. |
 
 ## Opcode-Tabelle (am Original ermittelt)
 
