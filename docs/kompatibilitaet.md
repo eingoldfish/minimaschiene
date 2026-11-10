@@ -10,15 +10,15 @@ Status: **offen** = noch nicht geklärt · **Annahme** = so umgesetzt, aber nich
 |---|---|---|---|
 | 1 | Numerische Opcodes und Kodierung der Adressierungsart in Wort 1 | geklärt für den Standardmodus (Test 1 + 3a) | Siehe Abschnitt „Opcode-Tabelle“. Offen sind noch die Codes der SP-Adressierungsarten und der Stackbefehle (`JSR`, `RTS`, `PUSH`, `POP`, `RSV`, `REL`) → Test 3b im erweiterten Modus. |
 | 2 | C-Flag bei `SUB`/`SUBI`/`CMP`/`CMPI` (Carry oder Borrow?) | geklärt (Test 1) | **Borrow:** C = 1 genau dann, wenn A < Operand (vorzeichenlos). 5−3 → C=0, 3−5 → C=1, 7−7 → C=0, 0−1 → C=1, 0xFFFF−1 → C=0, −32768−1 → C=0, V=1. `SUB` mit Adresse verhält sich wie `SUBI`. |
-| 3 | V/C-Flag bei `MUL`, `DIV`, `MOD`, Shifts | offen | |
+| 3 | V/C-Flag bei `MUL`, `DIV`, `MOD`, `MULH`, Shifts, Logikbefehlen | geklärt (Test 4 + 5) | Siehe Abschnitt „Flags der Rechen-, Logik- und Schiebebefehle“. Offen nur: N bei `DIVU`/`MODU`/`MULHU` mit Ergebnis ≥ 32768 (vermutlich immer 0). |
 | 4 | `CMP`: Manual sagt „setzt Null- und Negativflag“, `JLO`/`JHI` nach Vergleich nutzen aber C | geklärt (Test 1) | `CMP`/`CMPI` setzen Z, N und C exakt wie `SUB`, der Akku bleibt unverändert. `JLO` springt nach `3 CMP 5`. |
 | 4a | Flags bei Ladebefehlen | geklärt (Test 1) | `LOAD`/`LOADI`/`LOADC` setzen Z und N nach dem geladenen Wert und **löschen V und C**. `STORE` und Sprünge lassen die Flags unverändert. |
 | 5 | Division durch 0 | geklärt (Test 2) – Abweichung geplant | **Original:** `DIV`/`DIVI` (auch mit negativem Dividenden), `MODI`, `DIVUI` und `MODUI` durch 0 brechen ab. Es erscheint ein Browser-Pop-up „Division durch 0“, und Akku, Flags usw. werden zurückgesetzt. **Eigene Lösung (freigegeben, muss nicht dem Original entsprechen):** siehe „Bewusste Neuerungen“. |
 | 6 | Startwert des Stackpointers (SP) | offen | Vorläufig 0 in `createInitialState()`. |
-| 7 | Verhalten von `RESET` als Befehl im Programm | offen | |
+| 7 | Verhalten von `RESET` als Befehl im Programm | geklärt (Test 4) | `RESET` setzt Akku, Programmzähler, Befehlsregister und Flags zurück, der Speicher (inkl. Programm) ist danach 0, die Maschine ist angehalten (Ausführen/Schritt/Mikroschritt deaktiviert, nur „Zurücksetzen“ aktiv). Entspricht dem Knopf „Zurücksetzen“. Offen: Adresse 40 (Datenzelle) nach `RESET` nicht eigens gelesen, aber Adressen 0–3 waren 0. |
 | 8 | Feinaufteilung der Mikroschritte (Holen – Dekodieren – Ausführen) | offen | |
 | 9 | Dateiendung für Assemblerdateien | offen | Vermutlich `.mia` – Bestätigung ausstehend. |
-| 10 | Shifts um ≥ 16 Stellen | offen | |
+| 10 | Shifts um ≥ 16 Stellen | geklärt (Test 4) | **Schiebeweite modulo 32, gerechnet auf 32 Bit, Ergebnis auf 16 Bit abgeschnitten** (wie JavaScript `<<`, `>>>`, `>>`). `5 SHLI 16` = 0, `5 SHLI 17` = 0, `5 SHLI 100` = 80 (100 mod 32 = 4), `5 SHLI -1` = 0 (−1 mod 32 = 31), `-1 SHRI 16` = 0, `-32768 SHRAI 16` = −1, `-32768 SHRAI 15` = −1, `5 SHLI 0` = 5. Weder Modulo 16 noch Fehlermeldung. |
 | 11 | Speicherlayout beim Assemblieren | beobachtet (Test 2) | Die Befehle liegen ab Adresse 0 lückenlos mit je 2 Worten, `WORD`-Zellen schließen direkt an. In Test 2 wurde `STORE schritt` zu Adresse 75 übersetzt (37 Befehle = 74 Worte, `null` = 74, `schritt` = 75). Mit auskommentierten Fällen ergaben sich andere Adressen, z. B. 73. Exakte Adressgleichheit mit dem Original ist kein Muss, wird aber notiert. |
 
 ## Opcode-Tabelle (am Original ermittelt)
@@ -58,6 +58,26 @@ Lücken (z. B. 2–9, 23–29, 39, 44–49) gehören vermutlich zu den Stackbefe
 - Wort 1 erscheint als Mnemonic, der Adressteil als Dezimalzahl.
 - Immediate wird als `LOADI`/`ADDI` angezeigt (nicht `LOAD $`). Indirekt erscheint als `LOAD @` / `ADD @`, also anders als die Eingabesyntax `(11)`.
 - Unbekannte Codes (z. B. 0xFFFF) erscheinen als `---`. Der Wert 0 erscheint als `NOOP`, deshalb zeigt leerer Speicher `NOOP 0`.
+
+## Flags der Rechen-, Logik- und Schiebebefehle (am Original ermittelt, Test 4)
+
+Vorbelegung der Flags mit `CMPI` (C=1/N=1 bzw. V=1), dann der Befehl.
+
+- `MUL`, `DIV`, `MOD`, `MULH`, `AND`, `OR`, `XOR`, `NOT`, `SHR`, `SHRA` setzen Z und N nach dem Ergebnis und **löschen V und C** (auch wenn sie vorher 1 waren).
+- `SHL` setzt Z und N nach dem Ergebnis, löscht V und setzt **C = Bit 16 des 32-Bit-Ergebnisses**, also das zuletzt herausgeschobene Bit (`-32768 SHLI 1` → 0, Z=1, C=1; `3 SHLI 1` → C=0; `16384 SHLI 1` → −32768, N=1, V=0, C=0; `5 SHLI 16` → 0, Z=1, C=1). V wird auch bei Vorzeichenwechsel nicht gesetzt. Das gilt auch bei Schiebeweite ≥ 17: `5 SHLI 17` → 0, Z=1, **C=0** (Bit 16 von 0xA0000 ist 0, obwohl 1-Bits verloren gehen).
+- `ADD` setzt Z und N nach dem Ergebnis, **V = vorzeichenbehafteter Überlauf**, **C = vorzeichenloser Übertrag** (`32767 ADDI 1` → −32768, V=1, C=0; `-1 ADDI 1` → 0, Z=1, V=0, C=1).
+- `SHR`/`SHRA` setzen C **nicht**, auch wenn ein 1-Bit herausfällt (`3 SHRI 1` → 1, C=0; `1 SHRI 1` → 0, Z=1, C=0; `-1 SHRAI 1` → −1, N=1, C=0).
+- `MUL` liefert die unteren 16 Bit des Produkts, Z und N nach diesem Ergebnis, und bestimmt V und C **getrennt**: **V = 1, wenn das vorzeichenbehaftete Produkt nicht in −32768…32767 passt**, **C = 1, wenn das Produkt der vorzeichenlos gelesenen Operanden nicht in 0…65535 passt**.
+  - `300 MULI 300` → 24464, N=0, V=1, C=1 (90000 passt in keinen Bereich)
+  - `200 MULI 200` → −25536, N=1, V=1, C=0 (40000 passt nur unsigned)
+  - `-1 MULI 2` → −2, N=1, V=0, C=1 (65535 · 2 passt nur signed)
+  - `-1 MULI -1` → 1, N=0, V=0, C=1 (65535 · 65535 passt nur signed)
+- `MULH` setzt keine Überlaufflags: `300 MULHI 300` → 1, alle Flags 0.
+- **`DIVU`, `MODU`, `MULHU`** (Test 5) lesen beide Operanden vorzeichenlos (0…65535), setzen Z nach dem Ergebnis und löschen V und C.
+  - `-1 DIVUI 2` → 32767, `-1 MODUI 2` → 1, `7 DIVUI -1` → 0, `-32768 DIVUI -1` → 0, `-32768 MODUI -1` → −32768 (= 32768), `-1 MULHUI -1` → −2 (= 0xFFFE), `-1 MULHUI 2` → 1, `300 MULHUI 300` → 1.
+  - **Auffällig, N:** `-32768 DIVUI 1` → −32768 (Bitmuster 0x8000), aber **N=0**. N wird hier also nicht aus Bit 15 bestimmt, sondern vermutlich aus dem vorzeichenlosen Ergebnis (und ist damit immer 0). Vorher gesetztes N=1 wird gelöscht (`3 DIVUI 1` → N=0). Bestätigung für `MODU`/`MULHU` steht aus (`-32768 MODUI -1`, `-1 MULHUI -1`: N?).
+- `DIV`: `-32768 DIVI -1` → −32768 (Überlauf wird ohne Abbruch abgeschnitten), N=1, V=0, C=0.
+- **`MULH` = vorzeichenbehaftetes Produkt / 65536, Richtung 0 gerundet** – also *nicht* das echte hohe Wort (arithmetisches Schieben). Belege: `-300 MULHI 300` → −1 (echtes hohes Wort wäre −2), `3 MULHI -1` → 0 (statt −1), `-32768 MULHI 1` → 0, `-32768 MULHI -1` → 0, `300 MULHI 300` → 1. Für positive Produkte stimmen beide Varianten überein. `MULH` setzt Z und N nach dem Ergebnis und löscht V und C.
 
 ## Funde im Manual
 
