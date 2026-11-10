@@ -11,7 +11,7 @@
  * The page sends the list of files it actually loaded (message "cache"),
  * so the first visit already makes the app available offline.
  */
-const CACHE = 'minimaschine-v2';
+const CACHE = 'minimaschine-v3';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (event) => {
