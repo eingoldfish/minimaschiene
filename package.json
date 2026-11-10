@@ -1,0 +1,20 @@
+{
+  "name": "minimaschine-web",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Browser-based reimplementation of the Minimaschine CPU simulator (16-bit accumulator machine).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/core/tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
+  }
+}

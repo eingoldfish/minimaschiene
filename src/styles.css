@@ -1,0 +1,160 @@
+/* ---------- Color tokens (light default) ---------- */
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #d5d9e0;
+  --text: #1b1f24;
+  --text-muted: #5b6470;
+  --accent: #1f6feb;
+  --accent-text: #ffffff;
+  --radius: 8px;
+  --gap: 16px;
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* Dark mode: follows the OS setting unless the user forced light mode. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0f1216;
+    --surface: #181c22;
+    --border: #2d333b;
+    --text: #e6e9ee;
+    --text-muted: #9aa4b1;
+    --accent: #4c8dff;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #0f1216;
+  --surface: #181c22;
+  --border: #2d333b;
+  --text: #e6e9ee;
+  --text-muted: #9aa4b1;
+  --accent: #4c8dff;
+}
+
+/* ---------- Base ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 0 0 8px;
+}
+
+/* ---------- Header & toolbar ---------- */
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap);
+  padding: 12px var(--gap);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.toolbar button {
+  font: inherit;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.toolbar button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.toolbar button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+  color: var(--text-muted);
+}
+
+/* ---------- Main grid: editor left, machine right, memory below ---------- */
+.app-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    'editor machine'
+    'memory memory';
+  gap: var(--gap);
+  padding: var(--gap);
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--gap);
+  min-height: 200px;
+}
+
+.panel-editor {
+  grid-area: editor;
+}
+.panel-machine {
+  grid-area: machine;
+}
+.panel-memory {
+  grid-area: memory;
+}
+
+.placeholder {
+  color: var(--text-muted);
+}
+
+.registers {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.registers dd {
+  margin: 0;
+  font-family: var(--font-mono);
+}
+
+/* Small screens: everything stacked */
+@media (max-width: 900px) {
+  .app-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'editor'
+      'machine'
+      'memory';
+  }
+}
