@@ -1,6 +1,13 @@
 /**
  * Entry point of the app. Vite loads this file from index.html.
  */
+// Fonts are bundled (not loaded from a CDN), so the app also works offline.
+import '@fontsource/ibm-plex-sans/latin-400.css';
+import '@fontsource/ibm-plex-sans/latin-500.css';
+import '@fontsource/ibm-plex-sans/latin-600.css';
+import '@fontsource/ibm-plex-mono/latin-400.css';
+import '@fontsource/ibm-plex-mono/latin-500.css';
+import '@fontsource/ibm-plex-mono/latin-600.css';
 import './styles.css';
 import { App } from './ui/app';
 

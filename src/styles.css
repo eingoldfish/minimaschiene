@@ -23,6 +23,9 @@
   --accent-hover: #9ac2be;
   /* darker teal for focus rings, lines and accent text: #749b96 is too light for that (2.6:1) */
   --accent-strong: #46736d;
+  /* stronger lines (panel frames, keys) and the faint grid on the page */
+  --border-strong: #9ac2be;
+  --grid-line: #d4e8e5;
   --danger: #b42318;
   --danger-soft: #fdecea;
   --success: #1a7f37;
@@ -48,10 +51,10 @@
   --token-bg: #1b1f24;
   --token-text: #ffffff;
   --alu-value: #b0189f;
-  --radius: 8px;
+  --radius: 0;
   --gap: 1rem;
-  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --mem-row-h: 2.6rem; /* must match ROW_REM in memoryView.ts */
   font-size: 16px;
 }
@@ -71,6 +74,8 @@
     --accent-soft: #2a403d;
     --accent-hover: #bfdbd8;
     --accent-strong: #9ac2be;
+    --border-strong: #4b6863;
+    --grid-line: #16211f;
     --danger: #ff7b72;
     --danger-soft: #3b1715;
     --success: #56d364;
@@ -111,6 +116,8 @@
   --accent-soft: #2a403d;
   --accent-hover: #bfdbd8;
   --accent-strong: #9ac2be;
+  --border-strong: #4b6863;
+  --grid-line: #16211f;
   --danger: #ff7b72;
   --danger-soft: #3b1715;
   --success: #56d364;
@@ -1504,5 +1511,413 @@ button.is-busy {
 
   .menu.phone-menu.open > .menu-pop > button {
     justify-content: flex-start;
+  }
+}
+
+/* =====================================================================
+   Look: "technical data sheet"
+   Square corners, real lines instead of floating cards, keys that can be
+   pressed, LED-like flags, numbered panels and a faint grid on the page.
+   Layout and colours stay as above; this section only changes the look.
+   ===================================================================== */
+
+body {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 1.5rem 1.5rem;
+  -webkit-font-smoothing: antialiased;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent-strong);
+}
+
+/* ---------- Title ---------- */
+h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* a small "chip" in front of the name */
+h1::before {
+  content: '';
+  width: 1.1rem;
+  height: 1.1rem;
+  background:
+    linear-gradient(var(--surface), var(--surface)) center / 0.4rem 0.4rem no-repeat,
+    var(--accent-strong);
+  box-shadow:
+    0 -0.25rem 0 -0.15rem var(--accent-strong),
+    0 0.25rem 0 -0.15rem var(--accent-strong);
+}
+
+.app-header {
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.toolbar {
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+}
+
+/* ---------- Keys ---------- */
+button {
+  border-color: var(--border-strong);
+  border-radius: 0;
+  box-shadow: 0 2px 0 var(--border-strong);
+  font-weight: 500;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+
+button.primary {
+  border-color: var(--accent-strong);
+  box-shadow: 0 2px 0 var(--accent-strong);
+}
+
+button.primary:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+}
+
+button:disabled {
+  box-shadow: none;
+  border-style: dashed;
+}
+
+/* Things that are buttons in HTML but not "keys" */
+button.subtle,
+button.theme-switch,
+button.tab,
+.mem-cell,
+.error-item,
+.menu.open > .menu-pop > button {
+  box-shadow: none;
+}
+
+button.subtle:active,
+button.tab:active,
+.mem-cell:active,
+.menu-pop > button:active {
+  transform: none;
+}
+
+button.subtle:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-strong);
+  text-underline-offset: 0.3em;
+}
+
+/* Shortcut hints look like a label printed on the key */
+kbd {
+  margin-left: 0.55em;
+  padding-left: 0.55em;
+  border-left: 1px solid currentColor;
+  font-size: 0.68em;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+
+select,
+input[type='number'],
+.goto-input,
+.mem-input {
+  border-radius: 0;
+  border-color: var(--border-strong);
+}
+
+/* ---------- Status line: like a line in a log ---------- */
+.status {
+  border-radius: 0;
+  border: 1px solid var(--border-strong);
+  border-left-width: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.status::before {
+  content: '>';
+  margin-right: 0.6rem;
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.status-success::before { content: '✓'; color: var(--success); }
+.status-warning::before { content: '!'; color: var(--warning); }
+.status-error::before { content: '×'; color: var(--danger); }
+
+/* ---------- Panels: framed sheets with a numbered head strip ---------- */
+.app-main {
+  counter-reset: panel;
+}
+
+.panel {
+  border-color: var(--border-strong);
+  border-radius: 0;
+}
+
+.panel-head {
+  margin: -0.9rem calc(-1 * var(--gap)) 0.1rem;
+  padding: 0.45rem var(--gap);
+  min-height: 3rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.panel h2 {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.panel h2::before {
+  counter-increment: panel;
+  content: counter(panel, decimal-leading-zero);
+  margin-right: 0.7em;
+  padding: 0.1em 0.35em;
+  background: var(--accent-strong);
+  color: var(--surface);
+}
+
+.hint {
+  font-size: 0.8rem;
+}
+
+.editor-host,
+.mem-table {
+  border-color: var(--border-strong);
+  border-radius: 0;
+}
+
+.splitter::after {
+  width: 2px;
+  border-radius: 0;
+  background: var(--border-strong);
+}
+
+/* ---------- Tabs: a line under the chosen one ---------- */
+.tabs {
+  border: none;
+  border-radius: 0;
+  gap: 0.2rem;
+}
+
+.tab {
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tab:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text);
+}
+
+.tab[aria-selected='true'] {
+  background: transparent;
+  color: var(--text);
+  border-bottom-color: var(--accent-strong);
+  font-weight: 600;
+}
+
+/* ---------- Segmented choice ---------- */
+.segmented {
+  border-color: var(--border-strong);
+  border-radius: 0;
+}
+
+.segmented label + label span {
+  border-left: 1px solid var(--border-strong);
+}
+
+.segmented span {
+  font-size: 0.85rem;
+}
+
+/* ---------- Registers: modules with a printed label ---------- */
+/* 1px gaps + a 1px shadow around each module = one shared line between them,
+   and an empty grid cell simply stays empty */
+.machine {
+  gap: 1px;
+  padding: 1px;
+}
+
+.reg,
+.machine-state {
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+.machine-state {
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.reg {
+  border: none;
+  border-radius: 0;
+  background: var(--surface);
+}
+
+.reg-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.reg-value {
+  font-weight: 500;
+  font-size: 1.9rem;
+  letter-spacing: 0.02em;
+}
+
+/* Flags: little lamps */
+.flag {
+  position: relative;
+  border-width: 1px;
+  border-color: var(--border-strong);
+  border-radius: 0;
+  padding: 0.55rem 0.3rem 0.2rem;
+}
+
+.flag::before {
+  content: '';
+  position: absolute;
+  top: 0.25rem;
+  left: 50%;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-left: -0.2rem;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.flag.on {
+  color: #fff;
+  box-shadow: 0 0 0.6rem var(--lamp-on);
+}
+
+.flag.on::before {
+  background: #fff;
+}
+
+/* ---------- Explanation and phases ---------- */
+.explanation {
+  border-radius: 0;
+  border-left: 3px solid var(--accent-strong);
+}
+
+.phases {
+  gap: 2px;
+}
+
+/* the phases as arrows: fetch → decode → execute */
+.phases li {
+  border: none;
+  border-radius: 0;
+  padding: 0.25rem 0.9rem;
+  background: var(--accent-soft);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  clip-path: polygon(0 0, calc(100% - 0.55rem) 0, 100% 50%, calc(100% - 0.55rem) 100%, 0 100%, 0.55rem 50%);
+}
+
+.phases li:first-child {
+  clip-path: polygon(0 0, calc(100% - 0.55rem) 0, 100% 50%, calc(100% - 0.55rem) 100%, 0 100%);
+}
+
+.phases li.current {
+  background: var(--accent-strong);
+  color: var(--surface);
+}
+
+/* ---------- Diagram ---------- */
+.d-frame {
+  stroke: var(--border-strong);
+  stroke-dasharray: 6 4;
+}
+
+.d-part {
+  stroke: var(--border-strong);
+}
+
+.d-caption {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---------- Memory ---------- */
+.mem-header {
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  border-bottom-color: var(--border-strong);
+}
+
+.mem-addr {
+  border-right: 1px solid var(--border-strong);
+}
+
+/* ---------- Drop-down menus: a sheet with a hard shadow ---------- */
+.menu-pop {
+  top: calc(100% + 6px);
+  border-color: var(--border-strong);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--border-strong);
+}
+
+.menu.open > .menu-pop > button:hover {
+  background: var(--accent-soft);
+}
+
+.menu-heading {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---------- Light/dark switch: square ---------- */
+.switch-track,
+.switch-knob {
+  border-radius: 0;
+}
+
+.flag-icon {
+  border-radius: 0;
+}
+
+/* ---------- Maximized editor on phones: no head strip offset ---------- */
+@media (max-width: 600px) {
+  :root.max-editor .panel-editor .panel-head {
+    margin: 0;
+    padding: 0;
+    min-height: 0;
+    background: none;
+    border: none;
   }
 }

@@ -255,7 +255,7 @@ const editorTheme = EditorView.theme({
   '.cm-gutters': { backgroundColor: 'var(--surface-2)', color: 'var(--text-muted)', borderRight: '1px solid var(--border)' },
   '.cm-lineNumbers .cm-gutterElement': { cursor: 'pointer', minWidth: '2.5em' },
   '.cm-breakpoint-gutter .cm-gutterElement': { cursor: 'pointer', width: '1.1em', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  '.cm-tooltip': { backgroundColor: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px' },
+  '.cm-tooltip': { backgroundColor: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border-strong)', borderRadius: '0', boxShadow: '3px 3px 0 var(--border-strong)' },
 });
 
 // ====================================================================

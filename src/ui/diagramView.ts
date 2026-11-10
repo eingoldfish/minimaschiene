@@ -92,7 +92,7 @@ export class DiagramView {
     this.element = root;
 
     // ----- frame -----
-    root.append(svg('rect', { x: 10, y: 10, width: 440, height: 400, rx: 10, class: 'd-frame' }));
+    root.append(svg('rect', { x: 10, y: 10, width: 440, height: 400, rx: 0, class: 'd-frame' }));
     root.append(svg('text', { x: 22, y: 400, class: 'd-caption' }, tx().cpu));
     root.append(svg('text', { x: 40, y: 375, class: 'd-caption' }, tx().aluUnit));
     root.append(svg('text', { x: 255, y: 375, class: 'd-caption' }, tx().controlUnit));
@@ -138,7 +138,7 @@ export class DiagramView {
     const flagEls = {} as Record<'z' | 'n' | 'v' | 'c', SVGGElement>;
     (['z', 'n', 'v', 'c'] as const).forEach((f, i) => {
       const g = svg('g', { class: 'd-flag' });
-      g.append(svg('rect', { x: 50 + i * 37, y: 310, width: 30, height: 24, rx: 4 }));
+      g.append(svg('rect', { x: 50 + i * 37, y: 310, width: 30, height: 24, rx: 0 }));
       g.append(svg('text', { x: 65 + i * 37, y: 327 }, f.toUpperCase()));
       root.append(g);
       flagEls[f] = g;
@@ -165,14 +165,14 @@ export class DiagramView {
     this.texts['sp'] = this.addValue(347, 330, 'd-value extended-only');
 
     // ----- memory -----
-    const mem = svg('rect', { x: 560, y: 30, width: 150, height: 370, rx: 8, class: 'd-part' });
+    const mem = svg('rect', { x: 560, y: 30, width: 150, height: 370, rx: 0, class: 'd-part' });
     this.parts.set('memory', mem);
     root.append(mem);
     root.append(svg('text', { x: 572, y: 52, class: 'd-label' }, tx().memory));
     for (let i = 0; i < MEMORY_ROWS; i++) {
       const y = 70 + i * 46;
       const group = svg('g', { class: 'd-mem-row' });
-      group.append(svg('rect', { x: 568, y, width: 134, height: 38, rx: 4 }));
+      group.append(svg('rect', { x: 568, y, width: 134, height: 38, rx: 0 }));
       const addr = svg('text', { x: 574, y: y + 31, class: 'd-mem-addr' });
       const value = svg('text', { x: 696, y: y + 29, class: 'd-mem-value' });
       const label = svg('text', { x: 574, y: y + 12, class: 'd-mem-label' });
@@ -288,7 +288,7 @@ export class DiagramView {
       let cancelled = false;
       let frame = 0;
       const token = svg('g', { class: 'd-token' });
-      const box = svg('rect', { rx: 5, height: 24 });
+      const box = svg('rect', { rx: 2, height: 24 });
       const label = svg('text', { y: 5 });
       token.append(box, label);
       this.tokenLayer.append(token);
@@ -359,7 +359,7 @@ export class DiagramView {
   // ---------- helpers ----------
 
   private addBox(part: MachinePart, x: number, y: number, w: number, h: number, label: string, extraClass = ''): void {
-    const rect = svg('rect', { x, y, width: w, height: h, rx: 6, class: `d-part ${extraClass}` });
+    const rect = svg('rect', { x, y, width: w, height: h, rx: 0, class: `d-part ${extraClass}` });
     this.parts.set(part, rect);
     this.element.append(rect);
     this.element.append(svg('text', { x: x + 8, y: y + 17, class: `d-label ${extraClass}` }, label));
