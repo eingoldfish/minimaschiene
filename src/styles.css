@@ -269,7 +269,15 @@ input[type='number'],
 }
 
 .limit-input {
-  width: 4.2rem;
+  width: 3rem;
+}
+
+/* speed and time limit: clearly two separate settings */
+.run-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1.75rem;
 }
 
 .goto-input {
@@ -1478,7 +1486,7 @@ button.is-busy {
   }
 
   .run-settings .limit-input {
-    width: 3.2rem;
+    width: 2.6rem;
   }
 
   /* "Assemble" and "… and keep memory" in one row */
