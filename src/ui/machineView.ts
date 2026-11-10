@@ -55,7 +55,11 @@ export class MachineView {
     let irNote = 'Noch kein Befehl ausgeführt.';
     if (opts.hasExecuted) {
       const def = lookupOpcode(ir.opcode);
-      if (def && ir.mode) {
+      if (state.micro && state.micro.index < 2) {
+        // Micro steps: only the instruction word has been fetched so far.
+        irText = def && ir.mode ? `${def.mnemonic} …` : '…';
+        irNote = 'Der Adressteil wird gerade geholt.';
+      } else if (def && ir.mode) {
         irText = disassemble(encodeWord1(def, ir.mode), ir.address, opts.labelAt).text;
         irNote = `Adressierung: ${MODE_NAMES[ir.mode]}`;
       } else {

@@ -8,3 +8,4 @@ export * from './alu';
 export * from './cpu';
 export * from './assembler';
 export * from './disassembler';
+export * from './microcode';

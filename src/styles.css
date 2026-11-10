@@ -35,6 +35,11 @@
   --syn-number: #8250df;
   --syn-label: #0b7a5c;
   --syn-operator: #9a3412;
+  --bus-data: #d1242f;
+  --bus-address: #1f5fd1;
+  --bus-control: #1a7f37;
+  --token-bg: #1b1f24;
+  --token-text: #ffffff;
   --radius: 8px;
   --gap: 1rem;
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -75,6 +80,11 @@
     --syn-number: #d2a8ff;
     --syn-label: #5ad6a8;
     --syn-operator: #ffa657;
+    --bus-data: #ff7b72;
+    --bus-address: #79b0ff;
+    --bus-control: #56d364;
+    --token-bg: #f0f3f6;
+    --token-text: #0b0e12;
   }
 }
 :root[data-theme='dark'] {
@@ -107,6 +117,11 @@
   --syn-number: #d2a8ff;
   --syn-label: #5ad6a8;
   --syn-operator: #ffa657;
+  --bus-data: #ff7b72;
+  --bus-address: #79b0ff;
+  --bus-control: #56d364;
+  --token-bg: #f0f3f6;
+  --token-text: #0b0e12;
 }
 
 /* Beamer: everything bigger */
@@ -310,7 +325,7 @@ input[type='number'],
 /* ---------- Main grid: editor left, machine right, memory below ---------- */
 .app-main {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     'editor machine'
     'memory memory';
@@ -691,4 +706,249 @@ input[type='number'],
   kbd {
     display: none;
   }
+}
+
+/* ---------- Machine panel: tabs ---------- */
+.tabs {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.tab {
+  border: none;
+  border-radius: 0;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.tab[aria-selected='true'] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+button.is-busy {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* ---------- Diagram (SVG) ---------- */
+.diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--font-ui);
+}
+
+.d-frame {
+  fill: var(--surface-2);
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.d-caption {
+  font-size: 14px;
+  fill: var(--text-muted);
+  font-style: italic;
+}
+
+.d-wires polyline {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 2;
+}
+
+.d-bus {
+  stroke-width: 5;
+  opacity: 0.45;
+  stroke-linecap: round;
+}
+
+.d-bus.thin {
+  stroke-width: 2.5;
+}
+
+.d-bus.active {
+  opacity: 1;
+  stroke-width: 7;
+}
+
+.bus-data {
+  stroke: var(--bus-data);
+}
+.bus-address {
+  stroke: var(--bus-address);
+}
+.bus-control {
+  stroke: var(--bus-control);
+}
+
+.d-bus-label {
+  font-size: 15px;
+  font-weight: 600;
+  fill: var(--text);
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 4px;
+}
+
+.d-part {
+  fill: var(--surface);
+  stroke: var(--border);
+  stroke-width: 2;
+}
+
+.d-part.active {
+  stroke: var(--exec-border);
+  stroke-width: 3.5;
+  fill: var(--exec-bg);
+}
+
+.d-label {
+  font-size: 14px;
+  fill: var(--text-muted);
+}
+
+.d-value {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 600;
+  fill: var(--text);
+}
+
+.d-value.small {
+  font-size: 20px;
+}
+
+.d-small {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  fill: var(--text);
+}
+
+.d-small.muted {
+  font-family: var(--font-ui);
+  fill: var(--text-muted);
+}
+
+.d-alu-op {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  fill: var(--accent);
+}
+
+.d-divider {
+  stroke: var(--border);
+}
+
+.d-flag rect {
+  fill: var(--surface);
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.d-flag text {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  text-anchor: middle;
+  fill: var(--text-muted);
+}
+
+.d-flag.on rect {
+  fill: var(--lamp-on);
+  stroke: var(--lamp-on);
+}
+
+.d-flag.on text {
+  fill: #fff;
+}
+
+.d-mem-row rect {
+  fill: var(--surface-2);
+  stroke: none;
+}
+
+.d-mem-row.is-pc rect {
+  fill: var(--pc-bg);
+}
+
+.d-mem-row.accessed rect {
+  stroke: var(--exec-border);
+  stroke-width: 3;
+}
+
+.d-mem-addr,
+.d-mem-label {
+  font-size: 14px;
+  fill: var(--text-muted);
+}
+
+.d-mem-label {
+  font-size: 9px;
+  fill: var(--syn-label);
+}
+
+.d-mem-value {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-anchor: end;
+  fill: var(--text);
+}
+
+.d-token rect {
+  fill: var(--token-bg);
+}
+
+.d-token text {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  text-anchor: middle;
+  fill: var(--token-text);
+}
+
+/* ---------- Explanation under the diagram ---------- */
+.explanation {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  background: var(--surface-2);
+  min-height: 6.5rem;
+}
+
+.explanation p {
+  margin: 0.3rem 0 0;
+}
+
+.explanation .muted,
+.muted {
+  color: var(--text-muted);
+}
+
+.phases {
+  display: flex;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: phase;
+}
+
+.phases li {
+  flex: 1;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.phases li.current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
 }

@@ -165,3 +165,64 @@ export function alu(op: AluOp, a: number, b: number): AluResult | null {
       return zn(toSigned16(a) >> (b & 31));
   }
 }
+
+// ---------- Instruction semantics shared by Cpu.step() and the micro steps ----------
+
+/** Jump conditions, evaluated on the current flags. */
+export const JUMP_CONDITIONS: Readonly<Record<string, (f: Flags) => boolean>> = {
+  JMPP: (f) => !f.n && !f.z,
+  JMPNN: (f) => !f.n,
+  JMPN: (f) => f.n,
+  JMPNP: (f) => f.n || f.z,
+  JMPZ: (f) => f.z,
+  JMPNZ: (f) => !f.z,
+  JMP: () => true,
+  JMPV: (f) => f.v,
+  JMPC: (f) => f.c,
+  JHI: (f) => !f.c && !f.z,
+  JHS: (f) => !f.c,
+  JLO: (f) => f.c,
+  JLS: (f) => f.c || f.z,
+};
+
+/** Instructions that feed accumulator and operand into the ALU and write the result to the accumulator. */
+export const ALU_INSTRUCTIONS: Readonly<Record<string, AluOp>> = {
+  ADD: 'ADD',
+  SUB: 'SUB',
+  MUL: 'MUL',
+  DIV: 'DIV',
+  MOD: 'MOD',
+  DIVU: 'DIVU',
+  MODU: 'MODU',
+  MULH: 'MULH',
+  MULHU: 'MULHU',
+  AND: 'AND',
+  OR: 'OR',
+  XOR: 'XOR',
+  NOT: 'NOT',
+  SHL: 'SHL',
+  SHR: 'SHR',
+  SHRA: 'SHRA',
+  LOAD: 'PASS',
+};
+
+/** Symbol of an ALU operation for display ("Operation" in the ALU picture). */
+export const ALU_SYMBOLS: Readonly<Record<AluOp, string>> = {
+  PASS: '→',
+  ADD: '+',
+  SUB: '−',
+  MUL: '·',
+  DIV: ':',
+  MOD: 'mod',
+  DIVU: ':ᵤ',
+  MODU: 'modᵤ',
+  MULH: '·ₕ',
+  MULHU: '·ₕᵤ',
+  AND: 'and',
+  OR: 'or',
+  XOR: 'xor',
+  NOT: 'not',
+  SHL: '<<',
+  SHR: '>>',
+  SHRA: '>>ₐ',
+};

@@ -5,7 +5,8 @@
  * Rule: the UI never changes the CPU directly, only through Session/Core
  * methods. After every action, render() redraws everything from the state.
  */
-import { disassembleAt, type AssembleError } from '../core';
+import { disassembleAt, type AssembleError, type CyclePhase, type MicroStepEvent } from '../core';
+import { DiagramView } from './diagramView';
 import { h, setChildren } from './dom';
 import { createEditor, type ProgramEditor } from './editor';
 import { DEFAULT_PROGRAM } from './examples';
@@ -43,7 +44,12 @@ export class App {
   private readonly session = new Session();
   private readonly editor: ProgramEditor;
   private readonly machine = new MachineView();
+  private readonly diagram = new DiagramView();
   private readonly memory: MemoryView;
+  /** The last micro step (shown in the diagram), null after whole steps. */
+  private lastEvent: MicroStepEvent | null = null;
+  /** Increased for every micro step animation, to detect outdated ones. */
+  private animationCounter = 0;
 
   // ----- settings -----
   private detailed = false;
@@ -53,6 +59,8 @@ export class App {
   private speedIndex = 3;
   private limitSeconds = 5;
   private theme: Theme = 'auto';
+  private animations = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  private machineTab: 'diagram' | 'registers' = 'diagram';
 
   // ----- run state -----
   /** The source was edited after the last successful assembling. */
@@ -68,17 +76,19 @@ export class App {
   private readonly errorList: HTMLElement;
   private readonly btn: Record<'stepBack' | 'step' | 'micro' | 'run' | 'reset', HTMLButtonElement>;
   private readonly themeBtn: HTMLButtonElement;
+  private readonly explanationEl: HTMLElement;
+  private readonly tabButtons: Record<'diagram' | 'registers', HTMLButtonElement>;
+  private readonly tabPanes: Record<'diagram' | 'registers', HTMLElement>;
 
   constructor(root: HTMLElement) {
     // ----- header with run controls -----
     this.btn = {
       stepBack: button('◀ Schritt zurück', () => this.stepBack(), { key: KEYS.stepBack, title: 'Den letzten Befehl rückgängig machen' }),
       step: button('Schritt ▶', () => this.step(), { key: KEYS.step, title: 'Genau einen Befehl ausführen' }),
-      micro: button('Mikroschritt', () => this.microStep(), { key: KEYS.microStep, title: 'Holen – Dekodieren – Ausführen einzeln zeigen (kommt bald)' }),
+      micro: button('Mikroschritt', () => void this.microStep(), { key: KEYS.microStep, title: 'Einen Teilschritt des Befehlszyklus (Holen – Dekodieren – Ausführen) ausführen und im Schaubild zeigen' }),
       run: button('▶▶ Ausführen', () => this.toggleRun(), { key: KEYS.run, class: 'primary', title: 'Programm bis HALT, Haltepunkt oder Abbruchschranke ausführen' }),
       reset: button('Zurücksetzen', () => this.reset(), { title: 'Akku, Befehlszähler und Flags auf 0 setzen. Der Speicher bleibt erhalten.' }),
     };
-    this.btn.micro.disabled = true;
 
     const speedSelect = h('select', {
       'aria-label': 'Tempo beim Ausführen',
@@ -105,6 +115,9 @@ export class App {
           h('label', { class: 'check', title: 'Zeigt Werte zusätzlich hexadezimal/binär und den Opcode im Befehlsregister' },
             h('input', { type: 'checkbox', onchange: (ev: Event) => { this.detailed = (ev.target as HTMLInputElement).checked; this.render(); } }),
             'Detailansicht'),
+          h('label', { class: 'check', title: 'Werte im Schaubild wandern sichtbar über die Busse' },
+            h('input', { type: 'checkbox', checked: this.animations, onchange: (ev: Event) => { this.animations = (ev.target as HTMLInputElement).checked; } }),
+            'Animationen'),
           h('label', { class: 'check disabled', title: 'Stackpointer und Stackbefehle – folgt in einer späteren Version' },
             h('input', { type: 'checkbox', disabled: true }), 'Erweiterter Modus'),
           button('Beamer', () => this.toggleBeamer(), { class: 'subtle', title: 'Große Schrift für die Projektion' }),
@@ -131,9 +144,19 @@ export class App {
       h('p', { class: 'hint' }, 'Tipp: Klick auf eine Zeilennummer setzt einen Haltepunkt. Zeig mit der Maus auf einen Befehl, um eine Hilfe zu sehen.'));
 
     // ----- machine panel -----
+    this.explanationEl = h('div', { class: 'explanation', 'aria-live': 'polite' });
+    this.tabPanes = {
+      diagram: h('div', { class: 'tab-pane', role: 'tabpanel', id: 'pane-diagram' }, this.diagram.element, this.explanationEl),
+      registers: h('div', { class: 'tab-pane', role: 'tabpanel', id: 'pane-registers' }, this.machine.element),
+    };
+    const tab = (id: 'diagram' | 'registers', label: string) =>
+      h('button', { type: 'button', role: 'tab', class: 'tab', 'aria-controls': `pane-${id}`, onclick: () => this.setMachineTab(id) }, label);
+    this.tabButtons = { diagram: tab('diagram', 'Schaubild'), registers: tab('registers', 'Register') };
     const machinePanel = h('section', { class: 'panel panel-machine', 'aria-labelledby': 'h-machine' },
-      h('div', { class: 'panel-head' }, h('h2', { id: 'h-machine' }, 'Maschine')),
-      this.machine.element);
+      h('div', { class: 'panel-head' },
+        h('h2', { id: 'h-machine' }, 'Maschine'),
+        h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Ansicht der Maschine' }, this.tabButtons.diagram, this.tabButtons.registers)),
+      this.tabPanes.diagram, this.tabPanes.registers);
 
     // ----- memory panel -----
     this.memory = new MemoryView((address, value) => {
@@ -197,6 +220,7 @@ export class App {
 
     document.addEventListener('keydown', (ev) => this.onKey(ev));
     this.applyTheme();
+    this.setMachineTab(this.machineTab);
     this.setStatus('Willkommen! Drücke „Assemblieren“, um das Beispielprogramm in den Speicher zu laden.', 'info');
     this.render();
   }
@@ -205,8 +229,17 @@ export class App {
   // Actions
   // ==================================================================
 
+  /** Ends the micro step display (whole steps, runs, resets …). */
+  private leaveMicroView(): void {
+    this.animationCounter++; // a still running micro step animation must not redraw afterwards
+    this.diagram.finishAnimation();
+    this.btn.micro.classList.remove('is-busy');
+    this.lastEvent = null;
+  }
+
   private assemble(keepMemory: boolean): void {
     this.stopRun();
+    this.leaveMicroView();
     const result = this.session.assemble(this.editor.getText(), { keepMemory });
     this.editor.setErrors(result.errors);
     this.showErrors(result.errors);
@@ -229,31 +262,62 @@ export class App {
   private step(): void {
     if (this.running) return;
     if (!this.checkReady()) return;
+    this.leaveMicroView();
     const st = this.session.state;
     const line = this.session.currentLine;
-    const text = disassembleAt(st.memory, st.pc, (a) => this.session.labelAt(a)).text;
+    const wasMicro = st.micro !== null;
+    const text = disassembleAt(st.memory, this.session.instructionAddress, (a) => this.session.labelAt(a)).text;
     const reason = this.session.step();
     if (reason !== 'none') this.reportStop(reason);
-    else this.setStatus(`Ausgeführt: ${text}${line !== undefined && !this.programStale ? ` (Zeile ${line})` : ''}`, 'info');
+    else this.setStatus(`${wasMicro ? 'Fertig ausgeführt' : 'Ausgeführt'}: ${text}${line !== undefined && !this.programStale ? ` (Zeile ${line})` : ''}`, 'info');
     this.render();
   }
 
   private stepBack(): void {
     if (this.running) return;
+    this.leaveMicroView();
+    const wasMicro = this.session.state.micro !== null;
     if (this.session.stepBack()) {
-      this.setStatus('Einen Befehl zurückgegangen.', 'info');
+      const nowMicro = this.session.state.micro !== null;
+      this.setStatus(wasMicro || nowMicro ? 'Einen Mikroschritt zurückgegangen.' : 'Einen Befehl zurückgegangen.', 'info');
     } else {
       this.setStatus('Weiter zurück geht es nicht.', 'info');
     }
     this.render();
   }
 
-  private microStep(): void {
-    this.setStatus('Mikroschritte sind noch nicht verfügbar.', 'info');
+  /** One micro step, animated in the diagram. */
+  private async microStep(): Promise<void> {
+    if (this.running) return;
+    // Pressed again during an animation: end it, show its result, then do the next micro step.
+    if (this.diagram.isAnimating) {
+      this.animationCounter++;
+      this.diagram.finishAnimation();
+      this.render();
+    }
+    if (!this.checkReady()) {
+      this.render();
+      return;
+    }
+    const myAnimation = ++this.animationCounter;
+    const event = this.session.microStep();
+    if (!event) return;
+    this.lastEvent = event;
+    this.setMachineTab('diagram');
+    this.renderExplanation();
+    if (this.session.state.halted !== 'none') this.reportStop(this.session.state.halted);
+    else this.setStatus(`Mikroschritt ${event.index + 1} von ${event.count}: ${event.title}${event.done ? ' – Befehl fertig.' : ''}`, 'info');
+    this.btn.micro.classList.add('is-busy');
+    await this.diagram.play(event, this.animations);
+    // A newer micro step (or another action) took over: it will redraw.
+    if (myAnimation !== this.animationCounter) return;
+    this.btn.micro.classList.remove('is-busy');
+    this.render();
   }
 
   private reset(): void {
     this.stopRun();
+    this.leaveMicroView();
     this.session.reset();
     this.setStatus('Zurückgesetzt: Akku, Befehlszähler und Flags sind 0. Der Speicher ist unverändert.', 'info');
     this.render();
@@ -267,6 +331,7 @@ export class App {
       return;
     }
     if (!this.checkReady()) return;
+    this.leaveMicroView();
     this.running = true;
     this.firstSlice = true;
     this.runStart = performance.now();
@@ -377,6 +442,33 @@ export class App {
   // View settings
   // ==================================================================
 
+  private setMachineTab(tab: 'diagram' | 'registers'): void {
+    this.machineTab = tab;
+    for (const id of ['diagram', 'registers'] as const) {
+      this.tabPanes[id].hidden = id !== tab;
+      this.tabButtons[id].setAttribute('aria-selected', String(id === tab));
+    }
+  }
+
+  /** Text under the diagram: phase of the instruction cycle and what happens. */
+  private renderExplanation(): void {
+    const ev = this.lastEvent;
+    const phases: Array<[CyclePhase, string]> = [['fetch', 'Holen'], ['decode', 'Dekodieren'], ['execute', 'Ausführen']];
+    const pills = h('ol', { class: 'phases', 'aria-label': 'Befehlszyklus' },
+      ...phases.map(([phase, label]) => h('li', { class: ev?.phase === phase ? 'current' : '' }, label)));
+    if (!ev) {
+      setChildren(this.explanationEl, pills,
+        h('p', { class: 'muted' }, `Mit „Mikroschritt“ (${KEYS.microStep}) siehst du, wie ein Befehl in den Phasen `
+          + 'Holen – Dekodieren – Ausführen abgearbeitet wird.'));
+      return;
+    }
+    setChildren(this.explanationEl, pills,
+      h('p', { class: 'explanation-title' },
+        h('strong', {}, ev.title),
+        h('span', { class: 'muted' }, ` · Mikroschritt ${ev.index + 1} von ${ev.count}`)),
+      h('p', {}, ev.explanation));
+  }
+
   private toggleBeamer(): void {
     document.documentElement.classList.toggle('beamer');
     this.render();
@@ -401,7 +493,7 @@ export class App {
       'Shift+F9': () => this.assemble(true),
       F10: () => this.step(),
       'Shift+F10': () => this.stepBack(),
-      F11: () => this.microStep(),
+      F11: () => void this.microStep(),
       F5: () => this.toggleRun(),
     };
     const key = (ev.shiftKey ? 'Shift+' : '') + ev.key;
@@ -438,6 +530,8 @@ export class App {
       hasExecuted,
       labelAt: (a) => s.labelAt(a),
     });
+    this.diagram.update(st, this.lastEvent, { labelAt: (a) => s.labelAt(a) });
+    this.renderExplanation();
     this.memory.update(st, {
       format: this.format,
       hexAddresses: this.hexAddresses,
@@ -455,6 +549,7 @@ export class App {
 
     this.btn.stepBack.disabled = this.running || !s.canStepBack;
     this.btn.step.disabled = this.running;
+    this.btn.micro.disabled = this.running;
     this.btn.run.firstChild!.textContent = this.running ? '❚❚ Pause' : '▶▶ Ausführen';
     this.btn.run.classList.toggle('is-running', this.running);
   }

@@ -4,16 +4,19 @@
  * Design rules:
  * - Deterministic state machine: same state + same call = same result.
  * - The complete state is a plain, serialisable data object (`CpuState`),
- *   so the UI can implement "step back" via snapshot()/restore().
+ *   so the UI can implement "step back" via snapshot()/restore() or undo records.
  * - No DOM access here (enforced by src/core/tsconfig.json).
  *
- * Status (M1): standard instruction set via step(). Micro steps follow in M4,
- * stack instructions in M5.
+ * Two ways to execute:
+ * - step():      one whole instruction at once (fast, used by "Ausführen").
+ * - microStep(): one phase of the instruction cycle (see microcode.ts).
+ * Both lead to exactly the same state after an instruction.
  */
 
-import { alu, type AluOp, type Flags } from './alu';
+import { alu, ALU_INSTRUCTIONS, JUMP_CONDITIONS, type Flags } from './alu';
 import { MEMORY_SIZE, toUnsigned16, WORD_MASK } from './format';
 import { decodeWord1, type AddressingMode, type InstructionDef } from './isa';
+import { planInstruction, type MicroContext, type MicroEnv, type MicroStepEvent } from './microcode';
 
 export type { Flags } from './alu';
 
@@ -51,27 +54,12 @@ export interface CpuState {
   halted: HaltReason;
   /** Address of the memory cell written most recently (by STORE or the user), or null. */
   lastWrite: number | null;
+  /** Set while an instruction is executed micro step by micro step, otherwise null. */
+  micro: MicroContext | null;
 }
 
 /** Phase of the instruction cycle (Befehlszyklus). */
 export type CyclePhase = 'fetch' | 'decode' | 'execute';
-
-/** One value travelling over a bus during a micro step. */
-export interface BusTransfer {
-  bus: 'data' | 'address' | 'control';
-  value: number | 'read' | 'write';
-}
-
-/**
- * Result of a single micro step. The UI uses this to animate the data flow
- * and to show an explanation; the core knows nothing about SVG.
- */
-export interface MicroStepEvent {
-  phase: CyclePhase;
-  transfers: BusTransfer[];
-  /** Key of a German explanation text (texts live in the UI). */
-  explanationKey: string;
-}
 
 /** Everything in CpuState except the memory. */
 export type CpuRegisters = Omit<CpuState, 'memory'>;
@@ -106,51 +94,32 @@ export function createInitialState(): CpuState {
     memory: new Uint16Array(MEMORY_SIZE),
     halted: 'none',
     lastWrite: null,
+    micro: null,
   };
 }
 
-/** Jump conditions, evaluated on the current flags. */
-const JUMP_CONDITIONS: Readonly<Record<string, (f: Flags) => boolean>> = {
-  JMPP: (f) => !f.n && !f.z,
-  JMPNN: (f) => !f.n,
-  JMPN: (f) => f.n,
-  JMPNP: (f) => f.n || f.z,
-  JMPZ: (f) => f.z,
-  JMPNZ: (f) => !f.z,
-  JMP: () => true,
-  JMPV: (f) => f.v,
-  JMPC: (f) => f.c,
-  JHI: (f) => !f.c && !f.z,
-  JHS: (f) => !f.c,
-  JLO: (f) => f.c,
-  JLS: (f) => f.c || f.z,
-};
-
-/** Instructions that simply feed accumulator and operand into the ALU. */
-const ALU_INSTRUCTIONS: Readonly<Record<string, AluOp>> = {
-  ADD: 'ADD',
-  SUB: 'SUB',
-  MUL: 'MUL',
-  DIV: 'DIV',
-  MOD: 'MOD',
-  DIVU: 'DIVU',
-  MODU: 'MODU',
-  MULH: 'MULH',
-  MULHU: 'MULHU',
-  AND: 'AND',
-  OR: 'OR',
-  XOR: 'XOR',
-  NOT: 'NOT',
-  SHL: 'SHL',
-  SHR: 'SHR',
-  SHRA: 'SHRA',
-  LOAD: 'PASS',
-};
+/** Deep copy of all registers (without memory). */
+function copyRegisters(s: CpuRegisters): CpuRegisters {
+  return {
+    a: s.a,
+    pc: s.pc,
+    sp: s.sp,
+    ir: { ...s.ir },
+    flags: { ...s.flags },
+    halted: s.halted,
+    lastWrite: s.lastWrite,
+    micro: s.micro
+      ? { index: s.micro.index, start: { ...s.micro.start, ir: { ...s.micro.start.ir }, flags: { ...s.micro.start.flags } } }
+      : null,
+  };
+}
 
 export class Cpu {
   private state: CpuState = createInitialState();
   /** While a step is recorded for undo, memory writes are logged here. */
   private writeLog: Array<[number, number]> | null = null;
+  /** Memory access for micro steps (logs writes for undo). */
+  private readonly env: MicroEnv = { write: (address, value) => this.write(address, value) };
 
   /** Read-only view of the current state (UI must not mutate it). */
   getState(): Readonly<CpuState> {
@@ -169,6 +138,7 @@ export class Cpu {
     s.ir = { opcode: 0, mode: 'none', address: 0 };
     s.halted = 'none';
     s.lastWrite = null;
+    s.micro = null;
   }
 
   /** Replaces the whole memory (used after assembling). */
@@ -188,12 +158,17 @@ export class Cpu {
 
   /**
    * Executes one complete instruction (fetch, decode, execute).
+   * If an instruction was started with microStep(), it is finished.
    * Does nothing if the CPU is halted.
    * @returns the halt reason after this step ('none' = can continue)
    */
   step(): HaltReason {
     const s = this.state;
     if (s.halted !== 'none') return s.halted;
+    if (s.micro) {
+      while (this.state.micro) this.microStep();
+      return this.state.halted;
+    }
 
     // ----- fetch -----
     const instructionAddress = s.pc;
@@ -221,48 +196,56 @@ export class Cpu {
   }
 
   /**
-   * Like step(), but also returns the information needed to undo it.
+   * Executes ONE micro step (one part of Holen – Dekodieren – Ausführen).
+   * @returns what happened, or null if the CPU is halted
    */
-  stepUndoable(): { reason: HaltReason; undo: UndoRecord } {
+  microStep(): MicroStepEvent | null {
     const s = this.state;
-    const undo: UndoRecord = {
-      registers: {
-        a: s.a,
-        pc: s.pc,
-        sp: s.sp,
-        ir: { ...s.ir },
-        flags: { ...s.flags },
-        halted: s.halted,
-        lastWrite: s.lastWrite,
-      },
-      writes: [],
-    };
-    this.writeLog = undo.writes;
-    try {
-      return { reason: this.step(), undo };
-    } finally {
-      this.writeLog = null;
+    if (s.halted !== 'none') return null;
+    if (!s.micro) {
+      // Remember the registers at the start of the instruction; the plan is derived from them.
+      const r = copyRegisters(s);
+      s.micro = {
+        start: { a: r.a, pc: r.pc, sp: r.sp, ir: r.ir, flags: r.flags, halted: r.halted, lastWrite: r.lastWrite },
+        index: 0,
+      };
     }
+    const context = s.micro;
+    const plan = planInstruction(context.start, s.memory);
+    const index = context.index;
+    const planned = plan[index];
+    if (!planned) throw new Error('micro step index out of range');
+    planned.apply(s, this.env);
+    const done = index + 1 >= plan.length;
+    if (done) s.micro = null;
+    else context.index = index + 1;
+    return { ...planned.event, index, count: plan.length, done };
   }
 
-  /** Reverts a step recorded with stepUndoable(). Undo records must be applied newest first. */
+  /** Like step(), but also returns the information needed to undo it. */
+  stepUndoable(): { reason: HaltReason; undo: UndoRecord } {
+    const { result, undo } = this.recordUndo(() => this.step());
+    return { reason: result, undo };
+  }
+
+  /** Like microStep(), but also returns the information needed to undo it. */
+  microStepUndoable(): { event: MicroStepEvent | null; undo: UndoRecord } {
+    const { result, undo } = this.recordUndo(() => this.microStep());
+    return { event: result, undo };
+  }
+
+  /** Reverts a step recorded with stepUndoable()/microStepUndoable(). Apply newest first. */
   undo(record: UndoRecord): void {
     for (let i = record.writes.length - 1; i >= 0; i--) {
       const [address, oldValue] = record.writes[i]!;
       this.state.memory[address] = oldValue;
     }
-    const r = record.registers;
-    this.state = {
-      ...r,
-      ir: { ...r.ir },
-      flags: { ...r.flags },
-      memory: this.state.memory,
-    };
+    this.state = { ...copyRegisters(record.registers), memory: this.state.memory };
   }
 
   /**
    * Executes instructions until the CPU halts or `maxSteps` is reached.
-   * (The UI's time-based "Abbruchschranke" will be built on top of step().)
+   * (The UI's time-based "Abbruchschranke" is built on top of step().)
    */
   run(maxSteps: number): RunResult {
     let steps = 0;
@@ -272,11 +255,6 @@ export class Cpu {
       steps++;
     }
     return { reason: this.state.halted, steps };
-  }
-
-  /** Executes a single phase of the instruction cycle. TODO(M4). */
-  microStep(): MicroStepEvent {
-    throw new Error('Cpu.microStep() is not implemented yet (M4)');
   }
 
   /** Deep copy of the state, e.g. for "step back". */
@@ -292,17 +270,30 @@ export class Cpu {
   // ---------- internals ----------
 
   private static copyState(s: CpuState): CpuState {
-    return {
-      ...s,
-      ir: { ...s.ir },
-      flags: { ...s.flags },
-      memory: s.memory.slice(),
-    };
+    return { ...copyRegisters(s), memory: s.memory.slice() };
+  }
+
+  private recordUndo<T>(action: () => T): { result: T; undo: UndoRecord } {
+    const undo: UndoRecord = { registers: copyRegisters(this.state), writes: [] };
+    this.writeLog = undo.writes;
+    try {
+      return { result: action(), undo };
+    } finally {
+      this.writeLog = null;
+    }
   }
 
   private read(address: number): number {
     // Index is always in range because of the 16-bit mask.
     return this.state.memory[address & WORD_MASK] ?? 0;
+  }
+
+  /** Writes memory as part of an instruction (logged for undo). */
+  private write(address: number, value: number): void {
+    const addr = address & WORD_MASK;
+    this.writeLog?.push([addr, this.state.memory[addr] ?? 0]);
+    this.state.memory[addr] = value;
+    this.state.lastWrite = addr;
   }
 
   /** Value of the operand for the given addressing mode. */
@@ -315,7 +306,7 @@ export class Cpu {
       case 'indirect':
         return this.read(this.read(address));
       default:
-        // 'none' and the SP modes (M5) never reach this point in M1.
+        // 'none' and the SP modes (M5) never reach this point yet.
         throw new Error(`addressing mode '${mode}' not supported yet`);
     }
   }
@@ -372,13 +363,9 @@ export class Cpu {
         }
         return;
       }
-      case 'STORE': {
-        const target = this.effectiveAddress(mode, address);
-        this.writeLog?.push([target, s.memory[target] ?? 0]);
-        s.memory[target] = s.a;
-        s.lastWrite = target;
+      case 'STORE':
+        this.write(this.effectiveAddress(mode, address), s.a);
         return;
-      }
       case 'NOOP':
         return;
       case 'HALT':

@@ -13,6 +13,7 @@ import {
   type AssembleResult,
   type CpuState,
   type HaltReason,
+  type MicroStepEvent,
   type UndoRecord,
 } from '../core';
 
@@ -61,15 +62,27 @@ export class Session {
   step(): HaltReason {
     if (this.state.halted !== 'none') return this.state.halted;
     const { reason, undo } = this.cpu.stepUndoable();
+    this.pushHistory(undo);
+    return reason;
+  }
+
+  private pushHistory(undo: UndoRecord): void {
     this.history.push(undo);
     if (this.history.length > MAX_HISTORY) {
       // Drop the oldest quarter at once (cheaper than shifting every step).
       this.history.splice(0, MAX_HISTORY / 4);
     }
-    return reason;
   }
 
-  /** Goes back one instruction. Returns false if there is nothing to undo. */
+  /** Executes one micro step (undoable). Returns null if the machine is halted. */
+  microStep(): MicroStepEvent | null {
+    if (this.state.halted !== 'none') return null;
+    const { event, undo } = this.cpu.microStepUndoable();
+    this.pushHistory(undo);
+    return event;
+  }
+
+  /** Goes back one instruction or micro step. Returns false if there is nothing to undo. */
   stepBack(): boolean {
     const record = this.history.pop();
     if (!record) return false;
@@ -125,7 +138,15 @@ export class Session {
    * known and the PC is inside it.
    */
   get currentLine(): number | undefined {
-    return this.program?.addressToLine.get(this.state.pc);
+    return this.program?.addressToLine.get(this.instructionAddress);
+  }
+
+  /**
+   * Address of the instruction that is being executed: during micro steps
+   * the PC already moves on while fetching, so use the start address.
+   */
+  get instructionAddress(): number {
+    return this.state.micro ? this.state.micro.start.pc : this.state.pc;
   }
 
   /** Label name for an address (first match), for the memory view. */
