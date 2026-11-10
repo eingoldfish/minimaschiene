@@ -3,7 +3,7 @@
  * table) and the whole used memory as a tab-separated table for copying.
  * No DOM access, so it can be tested directly.
  */
-import { disassembleAt, formatWord, MEMORY_SIZE, SP_START, toHex16 } from '../core';
+import { disassembleAt, formatWord, isClearedCell, MEMORY_SIZE, SP_START, toHex16 } from '../core';
 
 export type MemoryFormat = 'signed' | 'unsigned' | 'hex' | 'opcodes';
 
@@ -27,8 +27,9 @@ export function cellText(memory: Uint16Array, address: number, format: MemoryFor
   return { text, instruction: ins.text };
 }
 
+/** Last used cell below `below` (cells 65534/65535 with their initial −1 count as unused). */
 function lastNonZero(memory: Uint16Array, below: number): number {
-  for (let a = below - 1; a >= 0; a--) if (memory[a] !== 0) return a;
+  for (let a = below - 1; a >= 0; a--) if (!isClearedCell(a, memory[a] ?? 0)) return a;
   return -1;
 }
 

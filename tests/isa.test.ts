@@ -60,7 +60,8 @@ describe('encoding of word 1 (values measured on the original)', () => {
 
   it('rejects modes an instruction does not allow', () => {
     expect(() => enc('STORE', 'immediate')).toThrow();
-    expect(() => enc('JMP', 'indirect')).toThrow();
+    expect(() => enc('JMP', 'immediate')).toThrow();
+    expect(() => enc('JMP', 'offset')).toThrow();
     expect(() => enc('NOT', 'direct')).toThrow();
   });
 
@@ -70,5 +71,6 @@ describe('encoding of word 1 (values measured on the original)', () => {
     expect(decodeWord1(0xffff)).toBeUndefined(); // unknown opcode
     expect(decodeWord1(0x0215)).toBeUndefined(); // STORE immediate
     expect(decodeWord1(0x0914)).toBeUndefined(); // unknown mode
+    expect(decodeWord1(0x0324)).toMatchObject({ mode: 'indirect', def: { mnemonic: 'JMP' } }); // JMP (adr)
   });
 });

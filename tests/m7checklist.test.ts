@@ -7,12 +7,13 @@ describe('checklist in docs/kompatibilitaet.md matches our behaviour', () => {
     const r = assemble(src, { extended });
     expect(r.errors).toEqual([]);
     const cpu = new Cpu();
+    cpu.extended = extended;
     cpu.loadMemory(r.memory);
     for (let i = 0; i < steps; i++) cpu.step();
     return cpu.getState();
   };
 
-  it('12: invalid opcode halts with PC on it', () => {
+  it('12: invalid opcode halts, PC already behind it (Java source)', () => {
     const r = assemble('HALT');
     const cpu = new Cpu();
     const mem = r.memory.slice();
@@ -20,7 +21,7 @@ describe('checklist in docs/kompatibilitaet.md matches our behaviour', () => {
     cpu.loadMemory(mem);
     cpu.step();
     expect(cpu.getState().halted).toBe('illegalOpcode');
-    expect(cpu.getState().pc).toBe(0);
+    expect(cpu.getState().pc).toBe(2);
   });
 
   it('13: PC after HALT', () => {
@@ -28,9 +29,9 @@ describe('checklist in docs/kompatibilitaet.md matches our behaviour', () => {
   });
 
   it('14–17, 21: assembler decisions', () => {
-    expect(assemble('JMP (10)').ok).toBe(false);
+    expect(assemble('JMP (10)').ok).toBe(true); // 14: indirect jumps exist (Java source)
     expect(assemble('JMP ende\nEnde: HALT').ok).toBe(false);
-    expect(assemble('load: HALT').ok).toBe(false);
+    expect(assemble('load: HALT').ok).toBe(true); // 16: instruction names are allowed as labels (Java source)
     expect(assemble('LOAD -1').ok).toBe(false);
     expect(assemble('LOADI 7\nPUSH\nLOAD -1(SP)', { extended: true }).ok).toBe(true);
   });

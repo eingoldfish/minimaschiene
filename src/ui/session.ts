@@ -14,6 +14,7 @@ import {
   type AssembleResult,
   type CpuState,
   type HaltReason,
+  isClearedCell,
   type MicroStepEvent,
   type UndoRecord,
 } from '../core';
@@ -52,6 +53,7 @@ export class Session {
    * the CPU is reset and the history is cleared. On errors nothing changes.
    */
   assemble(source: string, options: { keepMemory?: boolean; extended?: boolean } = {}): AssembleResult {
+    this.cpu.extended = options.extended ?? false;
     const result = assemble(source, {
       extended: options.extended,
       lang: this.language,
@@ -107,6 +109,36 @@ export class Session {
   reset(): void {
     this.cpu.reset();
     this.history = [];
+  }
+
+  /**
+   * Switches the extended mode. As in the original (desktop version 4.0),
+   * this resets the CPU; the memory is kept.
+   */
+  setExtended(on: boolean): void {
+    this.cpu.extended = on;
+    this.reset();
+  }
+
+  /** "Speicher löschen": clears the memory, the registers stay (as in the original). */
+  clearMemory(): void {
+    this.cpu.clearMemory();
+    this.history = [];
+  }
+
+  /**
+   * True if there is something to execute: an assembled program or memory
+   * the user has filled by hand. (Like the original, the CPU simply runs
+   * whatever is in memory; only a completely empty memory gets the hint
+   * "assemble first".)
+   */
+  get hasProgram(): boolean {
+    if (this.program) return true;
+    const memory = this.state.memory;
+    for (let a = 0; a < memory.length; a++) {
+      if (!isClearedCell(a, memory[a] ?? 0)) return true;
+    }
+    return false;
   }
 
   /** The user edits a memory cell. Clears the history (it would no longer fit). */

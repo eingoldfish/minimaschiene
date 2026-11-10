@@ -10,14 +10,14 @@ Legende: **A** = Web-App lehnt ab, was das Original annimmt (oder umgekehrt) · 
 
 | # | Eingabe | Original | Web-App | Art |
 |---|---|---|---|---|
-| 1 | `my_label:`, `_x:` (Unterstrich in Marken) | erlaubt | Fehler | A |
-| 2 | Befehlsname als Marke (`load:`, `word:`) | erlaubt; nur `SP`/`sp` im erweiterten Modus verboten | Fehler | A |
+| 1 | `my_label:`, `_x:` (Unterstrich in Marken) | erlaubt | ~~Fehler~~ **angeglichen**: erlaubt | – |
+| 2 | Befehlsname als Marke (`load:`, `word:`) | erlaubt; nur `SP`/`sp` im erweiterten Modus verboten | ~~Fehler~~ **angeglichen**: erlaubt, `SP` nur im erweiterten Modus verboten | – |
 | 3 | `Load 5` (gemischte Schreibweise) | Fehler, nur `LOAD` oder `load` | erlaubt | A |
 | 4 | `LOAD 5(Sp)` | Fehler, nur `SP`/`sp` | erlaubt | A |
 | 5 | `WORD +5`, `LOADI +5`, `ADD $+5` | erlaubt | Fehler | A |
 | 6 | Zahlen außerhalb 16 Bit (`LOAD 70000`, `LOADI -40000`) | ohne Meldung modulo 65536 | Fehler | A (Web-App ist strenger, sinnvoll) |
-| 7 | `JMP (10)`, `JMPZ (x)`; erweitert `JMPZ @2(SP)` | erlaubt (indirekter Sprung) | Fehler | A |
-| 8 | `JSR (4)`, `JSR 2(SP)`, `JSR @2(SP)`, `JSR $2(SP)` | erlaubt | nur direkt | A |
+| 7 | `JMP (10)`, `JMPZ (x)`; erweitert `JMPZ @2(SP)` | erlaubt (indirekter Sprung) | **angeglichen** für `(adr)`; `@2(SP)` bei Sprüngen weiter Fehler | A (Rest) |
+| 8 | `JSR (4)`, `JSR 2(SP)`, `JSR @2(SP)`, `JSR $2(SP)` | erlaubt | **angeglichen** für `JSR (4)`; SP-Arten weiter Fehler | A (Rest) |
 | 9 | `LOAD -1(SP)`, `LOAD @-1(SP)` | Fehler; Minus nur bei `$-1(SP)` | erlaubt | A |
 | 10 | Marke als SP-Offset (`LOAD x(SP)`) | Fehler | erlaubt | A |
 | 11 | `LOAD (SP)`, `LOAD @(SP)` | erlaubt als `0(SP)` bzw. `@0(SP)` | Fehler | A |
@@ -35,16 +35,16 @@ Legende: **A** = Web-App lehnt ab, was das Original annimmt (oder umgekehrt) · 
 
 | # | Thema | Original | Web-App | Art |
 |---|---|---|---|---|
-| 19 | Zellen 65534 und 65535 nach Start, „Speicher löschen“, Assemblieren und Befehl `RESET` | **−1 (0xFFFF)** | 0 | E (z. B. `POP` auf leerem Stack: −1 statt 0) |
-| 20 | PC nach illegalem Befehlscode | hinter dem Befehl (+2) | bleibt auf dem Befehl | E (widerlegt Annahme 12) |
-| 21 | Befehle ohne Adresse (`NOOP`, `RESET`, `LOADC`, `NOT`, `HALT`, `RTS`, `PUSH`, `POP`) mit Adressteil ≠ 0 | illegal | Adressteil wird ignoriert | E |
-| 22 | Sprünge mit Art 3 (indirekt), `JSR` mit Art 3–6 | werden ausgeführt | illegal | E |
+| 19 | Zellen 65534 und 65535 nach Start, „Speicher löschen“, Assemblieren und Befehl `RESET` | **−1 (0xFFFF)** | **angeglichen** (außer Befehl `RESET`, der bei uns den Speicher behält ✅) | – |
+| 20 | PC nach illegalem Befehlscode | hinter dem Befehl (+2) | **angeglichen** | – |
+| 21 | Befehle ohne Adresse (`NOOP`, `RESET`, `LOADC`, `NOT`, `HALT`, `RTS`, `PUSH`, `POP`) mit Adressteil ≠ 0 | illegal | **angeglichen** | – |
+| 22 | Sprünge mit Art 3 (indirekt), `JSR` mit Art 3–6 | werden ausgeführt | **angeglichen** für Art 3; Art 4–6 weiter illegal | E (Rest) |
 | 23 | Rechen-/`LOAD`-Befehle mit Art 7–255 | legal, Operand 0; `STORE` mit Art 7+ wie direkt | illegal | E (nur durch Speicher-Editieren erreichbar) |
-| 24 | Stackbefehle (5, 6, 7, 8, 25, 26) ohne erweiterten Modus | illegal | werden ausgeführt | E (widerlegt Annahme 20) |
+| 24 | Stackbefehle (5, 6, 7, 8, 25, 26) ohne erweiterten Modus | illegal | **angeglichen** | – |
 | 25 | `$adr(SP)` (Art 6) | Operand = adr + SP **ohne** Kürzen auf 16 Bit, beeinflusst V/C | auf 16 Bit gekürzt | E (Randfall) |
 | 26 | `MUL`: C-Flag, `MULHU`: Ergebnis | 32-Bit-Überlauf in Java: `-1 MULI -1` → C=0; `-1 MULHUI -1` → −1 | C=1 bzw. −2 | E, **nur Desktop**: Die Webversion des Originals liefert wie die Web-App C=1 bzw. −2 (gemessen, siehe `kompatibilitaet.md`). Web-App so lassen. |
 | 27 | Division durch 0 | Desktop: Meldung, Programm läuft **weiter** (A bleibt, V=C=1). Web: Rücksetzen | hält an | ✅ |
-| 28 | Nach Ende eines Laufs (HALT, illegal, Zeitschranke) | Ausführen/Schritt gesperrt bis Zurücksetzen oder Assemblieren | man kann weitermachen | U |
+| 28 | Nach Ende eines Laufs (HALT, illegal, Zeitschranke) | Ausführen/Schritt gesperrt bis Zurücksetzen oder Assemblieren | **angeglichen** („Schritt zurück“ bleibt möglich ✅) | – |
 | 29 | SP-Arithmetik | interner Tippfehler (−32268 statt −32768), wirkt praktisch nie | sauber modulo 65536 | nicht nachbauen |
 
 **Übereinstimmung:** alle Opcodes außer RSV/REL, Ergebnisse und Flags von ADD, SUB, CMP, DIV, MOD, DIVU, MODU, MULH, LOAD, LOADC, AND, OR, XOR, NOT, SHL/SHR/SHRA (Schiebeweite mod 32, C bei SHL), alle 13 Sprungbedingungen, Flags bei STORE/Sprüngen unverändert, Adressierungsarten 1–5, PC-Überlauf, PC nach `HALT` (+2), `PUSH`/`POP`/`JSR`/`RTS`-Reihenfolge und -Flags, SP-Start 65534, Zurücksetzen behält den Speicher, Zeitschranke 5 s.
@@ -72,11 +72,11 @@ Weitere Unterschiede:
 
 | # | Thema | Original | Web-App |
 |---|---|---|---|
-| 30 | Speicher editieren in der Hex-Ansicht | Eingabe wird als Hex gelesen (`10` = 16, `FF` ohne `0x` erlaubt) | `10` = 10, `FF` wird abgelehnt |
-| 31 | „Speicher löschen“ (ohne CPU-Reset) | vorhanden | fehlt |
-| 32 | Speicher nur von Hand bearbeitet, nie assembliert | CPU führt aus, was im Speicher steht | „erst assemblieren“ |
-| 33 | Erweiterten Modus umschalten | Desktop: CPU wird zurückgesetzt | Hinweis „neu assemblieren“ |
-| 34 | Zurücksetzen und Markierung „zuletzt geändert“ | Markierung bleibt | Markierung wird gelöscht (widerspricht eigener Doku) |
+| 30 | Speicher editieren in der Hex-Ansicht | Eingabe wird als Hex gelesen (`10` = 16, `FF` ohne `0x` erlaubt) | **angeglichen** |
+| 31 | „Speicher löschen“ (ohne CPU-Reset) | vorhanden | **angeglichen** |
+| 32 | Speicher nur von Hand bearbeitet, nie assembliert | CPU führt aus, was im Speicher steht | **angeglichen** (Hinweis nur bei ganz leerem Speicher) |
+| 33 | Erweiterten Modus umschalten | Desktop: CPU wird zurückgesetzt | **angeglichen** (plus Hinweis „neu assemblieren“) |
+| 34 | Zurücksetzen und Markierung „zuletzt geändert“ | Markierung bleibt | **angeglichen** |
 | 35 | Hex-Format | Speicher `00FF`, CPU `00ff`, ohne Präfix | `0x00FF` |
 | 36 | Opcode-Ansicht bei unzulässigen Kombinationen (z. B. 0x0138) | zeigt den Befehlsnamen | `---` |
 | 37 | Opcode-Ansicht, Adressteil | immer mit Vorzeichen (`-25536`) | ohne Vorzeichen bzw. Marke |
@@ -89,13 +89,13 @@ Weitere Unterschiede:
 |---|---|---|
 | 1 / 22 | RSV/REL gibt es im Original nicht | Es gibt sie: Opcodes 7/8, Schreibweise `RSV $3`. Im Test wurde `RSV 3` ohne `$` probiert. |
 | 9 | `.mia` (Annahme) | bestätigt |
-| 12 | PC bleibt auf illegalem Befehl | PC steht dahinter (+2); andere Regeln, was illegal ist (Nr. 21–24) |
+| 12 | PC bleibt auf illegalem Befehl | PC steht dahinter (+2); andere Regeln, was illegal ist (Nr. 21–24) – **übernommen** (außer Nr. 22/23) |
 | 13 | PC nach HALT = +2 (Annahme) | bestätigt |
-| 14 | keine indirekten Sprünge | Original erlaubt `JMP (adr)` |
+| 14 | keine indirekten Sprünge | Original erlaubt `JMP (adr)` – **übernommen** |
 | 15 | Marken unterscheiden Groß-/Kleinschreibung | bestätigt |
-| 16 | Befehlsnamen als Marken verboten | Original erlaubt sie (außer `SP`) |
+| 16 | Befehlsnamen als Marken verboten | Original erlaubt sie (außer `SP`) – **übernommen** |
 | 17 | negative Zahlen nur bei Immediate/WORD | bestätigt, zusätzlich `+` erlaubt und keine Bereichsprüfung |
 | 18 / 19 | Reihenfolge und Flags von JSR/RTS/PUSH (Annahme) | bestätigt |
-| 20 | CPU führt Stackbefehle auch ohne erweiterten Modus aus | Original: illegal |
+| 20 | CPU führt Stackbefehle auch ohne erweiterten Modus aus | Original: illegal – **übernommen** |
 | 21 | `LOAD -1(SP)` erlaubt | Original: Fehler |
 | 5 | Division durch 0 setzt zurück | gilt für die Webversion; die Desktopversion läuft weiter |

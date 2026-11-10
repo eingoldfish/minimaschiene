@@ -92,7 +92,8 @@ export const SP_MODES: readonly AddressingMode[] = ['offset', 'offsetIndirect', 
 const DATA: readonly AddressingMode[] = ['direct', 'immediate', 'indirect', 'offset', 'offsetIndirect', 'immediateOffset'];
 const STORE_MODES: readonly AddressingMode[] = ['direct', 'indirect', 'offset', 'offsetIndirect'];
 const NUMBER: readonly AddressingMode[] = ['immediate'];
-const JUMP: readonly AddressingMode[] = ['direct'];
+/** Jumps: direct, or indirect "JMP (adr)" = jump to the address stored in cell adr (as in the original). */
+const JUMP: readonly AddressingMode[] = ['direct', 'indirect'];
 
 const FLAGS_ARITH: Texts = {
   de: 'Z, N nach dem Ergebnis; V bei Überlauf mit Vorzeichen; C bei Überlauf ohne Vorzeichen',
@@ -331,17 +332,6 @@ export function allMnemonicNames(): string[] {
   return [...BY_MNEMONIC.keys(), WORD_DIRECTIVE];
 }
 
-/** True if `name` is reserved and therefore cannot be used as a label. */
-export function isReservedName(name: string): boolean {
-  const upper = name.toUpperCase();
-  return (
-    BY_MNEMONIC.has(upper) ||
-    EXTENDED_MNEMONICS.includes(upper) ||
-    upper === WORD_DIRECTIVE ||
-    upper === 'SP'
-  );
-}
-
 /** Finds an instruction by mnemonic, alias or "…I" short form (case-insensitive). */
 export function lookupMnemonic(name: string): MnemonicLookup | undefined {
   return BY_MNEMONIC.get(name.toUpperCase());
@@ -370,9 +360,26 @@ export interface DecodedWord1 {
 }
 
 /**
- * Splits word 1 into instruction and addressing mode.
+ * Decodes the instruction in word 1 + word 2 like the CPU of the original.
+ * Returns undefined for an illegal instruction code: unknown opcode or mode,
+ * a mode the instruction does not allow, an address part ≠ 0 for an
+ * instruction without address, or a stack instruction outside extended mode.
+ */
+export function decodeInstruction(word1: number, word2: number, extended: boolean): DecodedWord1 | undefined {
+  const decoded = decodeWord1(word1);
+  if (!decoded) return undefined;
+  // As in the original: instructions without an address need address part 0 …
+  if (decoded.mode === 'none' && word2 !== 0) return undefined;
+  // … and the stack instructions only exist in extended mode.
+  if (decoded.def.extendedOnly && !extended) return undefined;
+  return decoded;
+}
+
+/**
+ * Splits word 1 into instruction and addressing mode (without looking at
+ * word 2 or the extended mode; the CPU uses decodeInstruction()).
  * Returns undefined for unknown opcodes, unknown modes, or a mode the
- * instruction does not allow (= illegal instruction code).
+ * instruction does not allow.
  */
 export function decodeWord1(word1: number): DecodedWord1 | undefined {
   const def = BY_OPCODE.get(word1 & 0xff);

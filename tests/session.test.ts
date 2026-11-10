@@ -100,3 +100,45 @@ describe('Session', () => {
     expect(s.canStepBack).toBe(false);
   });
 });
+
+describe('Session: behaviour of the original (Java 4.0)', () => {
+  it('switching extended mode resets the CPU and keeps the memory', () => {
+    const s = new Session();
+    s.assemble(COUNTDOWN);
+    s.step();
+    s.step();
+    s.setExtended(true);
+    expect(s.state.pc).toBe(0);
+    expect(s.state.a).toBe(0);
+    expect(s.cpu.extended).toBe(true);
+    expect(s.state.memory[1]).toBe(3); // LOADI 3 still there
+  });
+
+  it('clearMemory clears the memory but keeps the registers', () => {
+    const s = new Session();
+    s.assemble(COUNTDOWN);
+    s.step();
+    s.clearMemory();
+    expect(s.state.a).toBe(3);
+    expect(s.state.pc).toBe(2);
+    expect(s.state.memory[1]).toBe(0);
+    expect(s.state.memory[65535]).toBe(0xffff);
+    expect(s.canStepBack).toBe(false);
+  });
+
+  it('memory filled by hand can be executed without assembling', () => {
+    const s = new Session();
+    expect(s.hasProgram).toBe(false);
+    s.writeMemory(0, 0x0214); // LOADI
+    s.writeMemory(1, 7);
+    expect(s.hasProgram).toBe(true);
+    s.step();
+    expect(s.state.a).toBe(7);
+  });
+
+  it('assembling sets the extended mode of the CPU', () => {
+    const s = new Session();
+    expect(s.assemble('LOADI 1\nPUSH\nHALT', { extended: true }).ok).toBe(true);
+    expect(s.runSlice(10, true).reason).toBe('halt');
+  });
+});

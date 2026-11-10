@@ -13,6 +13,26 @@ export const WORD_MASK = 0xffff;
 /** Number of addressable memory cells (64K words). */
 export const MEMORY_SIZE = 0x10000;
 
+/**
+ * Contents of the two topmost cells after power-on and after clearing memory.
+ * As in the original, cells 65534 and 65535 hold −1 (0xFFFF); all other cells hold 0.
+ * (Running into them stops the machine with "illegal instruction code".)
+ */
+export const CLEARED_TOP_VALUE = 0xffff;
+
+/** A freshly cleared memory: all 0, except cells 65534 and 65535 = 0xFFFF (as in the original). */
+export function createClearedMemory(): Uint16Array {
+  const memory = new Uint16Array(MEMORY_SIZE);
+  memory[MEMORY_SIZE - 2] = CLEARED_TOP_VALUE;
+  memory[MEMORY_SIZE - 1] = CLEARED_TOP_VALUE;
+  return memory;
+}
+
+/** True if the cell looks unused: 0, and for the two top cells also their initial 0xFFFF. */
+export function isClearedCell(address: number, value: number): boolean {
+  return value === 0 || (address >= MEMORY_SIZE - 2 && value === CLEARED_TOP_VALUE);
+}
+
 /** How a word should be displayed in the UI. */
 export type NumberFormat = 'signed' | 'unsigned' | 'hex' | 'binary';
 
@@ -53,11 +73,15 @@ export function toBinary16(value: number): string {
  * Parses a number typed by the user (e.g. when editing memory):
  * decimal ("42", "-7") or hex ("0x2A"). Returns the unsigned 16-bit value,
  * or null if the text is not a valid number in −32768 … 65535.
+ * @param hexDefault true in the hex view: as in the original, the input is
+ *        read as hex even without "0x" ("10" = 16, "FF" = 255).
  */
-export function parseWord(text: string): number | null {
+export function parseWord(text: string, hexDefault = false): number | null {
   const t = text.trim();
   let value: number;
-  if (/^-?[0-9]+$/.test(t)) {
+  if (hexDefault && /^(0[xX])?[0-9A-Fa-f]+$/.test(t)) {
+    value = parseInt(t.replace(/^0[xX]/, ''), 16);
+  } else if (/^-?[0-9]+$/.test(t)) {
     value = parseInt(t, 10);
   } else if (/^0[xX][0-9A-Fa-f]+$/.test(t)) {
     value = parseInt(t.slice(2), 16);

@@ -41,7 +41,7 @@ import { getLanguage, t } from './i18n';
 // Syntax highlighting
 // ====================================================================
 
-const LETTER = 'A-Za-zÄÖÜäöüß';
+const LETTER = 'A-Za-zÄÖÜäöüß_';
 const WORD_RE = new RegExp(`^[${LETTER}][${LETTER}0-9]*`);
 
 function isInstructionName(word: string): boolean {

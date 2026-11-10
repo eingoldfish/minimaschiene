@@ -63,3 +63,15 @@ describe('parseWord', () => {
     }
   });
 });
+
+describe('parseWord in the hex view (as in the original)', () => {
+  it('reads digits as hex even without 0x', () => {
+    expect(parseWord('10', true)).toBe(16);
+    expect(parseWord('FF', true)).toBe(255);
+    expect(parseWord('ffff', true)).toBe(0xffff);
+    expect(parseWord('0x2A', true)).toBe(42);
+    expect(parseWord('10000', true)).toBeNull();
+    expect(parseWord('-5', true)).toBe(0xfffb); // negative decimal still works
+    expect(parseWord('FF')).toBeNull(); // other views: decimal
+  });
+});

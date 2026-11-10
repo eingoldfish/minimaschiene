@@ -11,6 +11,7 @@ function run(source: string, maxSteps = 10_000): Cpu {
   const r = assemble(source, { extended: true });
   expect(r.errors.map((e) => formatError(e))).toEqual([]);
   const cpu = new Cpu();
+  cpu.extended = true;
   cpu.loadMemory(r.memory);
   expect(cpu.run(maxSteps).reason).toBe('halt');
   return cpu;
@@ -145,6 +146,7 @@ RTS`);
     expect(cpu.getState().sp).toBe(SP_START);
     const r = assemble('RSV 3\nRESET', { extended: true });
     const cpu2 = new Cpu();
+    cpu2.extended = true;
     cpu2.loadMemory(r.memory);
     expect(cpu2.run(10).reason).toBe('reset');
     expect(cpu2.getState().sp).toBe(SP_START);

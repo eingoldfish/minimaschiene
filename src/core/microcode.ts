@@ -21,7 +21,7 @@ import { alu, ALU_INSTRUCTIONS, ALU_SYMBOLS, JUMP_CONDITIONS, type AluOp, type F
 import type { AluActivity, CpuState, CyclePhase, InstructionRegister } from './cpu';
 import { disassemble } from './disassembler';
 import { toSigned16, WORD_MASK } from './format';
-import { decodeWord1, SP_START, type AddressingMode } from './isa';
+import { decodeInstruction, SP_START, type AddressingMode } from './isa';
 import type { Language } from './lang';
 
 /** Parts of the machine that can light up in the picture. */
@@ -175,7 +175,7 @@ function computeText(op: AluOp, a: number, b: number, result: number): string {
  * Memory must still be unchanged since the start of the instruction
  * (only the very last micro step of STORE, PUSH and JSR writes).
  */
-export function planInstruction(start: InstructionStart, memory: Uint16Array, language: Language = 'de'): PlannedMicroStep[] {
+export function planInstruction(start: InstructionStart, memory: Uint16Array, language: Language = 'de', extended = false): PlannedMicroStep[] {
   lang = language;
   const read = (address: number) => memory[address & WORD_MASK] ?? 0;
   const pc0 = start.pc;
@@ -183,7 +183,7 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array, la
   const pc2 = (pc0 + 2) & WORD_MASK;
   const word1 = read(pc0);
   const word2 = read(pc1);
-  const decoded = decodeWord1(word1);
+  const decoded = decodeInstruction(word1, word2, extended);
   const steps: PlannedMicroStep[] = [];
 
   // ----- Holen / fetch -----
@@ -233,16 +233,15 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array, la
         phase: 'decode',
         title: tr('Dekodieren: unbekannter Befehl', 'Decode: unknown instruction'),
         explanation: tr(
-          `Das Steuerwerk kennt den Befehlscode ${word1} nicht. Die Maschine hält an; `
-            + `der Befehlszähler wird wieder auf ${pc0} gestellt, damit man sieht, wo der Fehler liegt.`,
-          `The control unit does not know the instruction code ${word1}. The machine halts; `
-            + `the program counter is set back to ${pc0}, so you can see where the problem is.`),
+          `Das Steuerwerk erkennt in ${word1} (Adressteil ${word2}) keinen gültigen Befehl. Die Maschine hält an; `
+            + `der Befehlszähler zeigt schon auf ${pc2}, der fehlerhafte Befehl steht bei Adresse ${pc0}.`,
+          `The control unit finds no valid instruction in ${word1} (address part ${word2}). The machine halts; `
+            + `the program counter already points to ${pc2}, the faulty instruction is at address ${pc0}.`),
         bus: {},
         flows: [{ route: 'ir→decoder', label: String(word1) }],
         active: ['ir', 'decoder'],
       },
       apply(s) {
-        s.pc = pc0;
         s.halted = 'illegalOpcode';
       },
     });
@@ -271,10 +270,6 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array, la
   const sp = start.sp;
   const spMinus1 = (sp - 1) & WORD_MASK;
   const spPlus1 = (sp + 1) & WORD_MASK;
-
-  // Stack instructions (extended mode)
-  const stackSteps = planStackInstruction(name, { start, word2, pc0, pc2, sp, spMinus1, spPlus1, read });
-  if (stackSteps) return [...steps, ...stackSteps];
 
   // SP-relative addressing: first compute address part + SP.
   let address = word2;
@@ -316,30 +311,37 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array, la
     address = target;
   }
 
+  // Stack instructions (extended mode). JSR (adr) has already looked up its target above.
+  const stackSteps = planStackInstruction(name, { start, word2, target: address, pc0, pc2, sp, spMinus1, spPlus1, read });
+  if (stackSteps) return [...steps, ...stackSteps];
+
   // Jumps
   const condition = JUMP_CONDITIONS[name];
   if (condition) {
     const jumps = condition(start.flags);
     const condText = def.condition ? def.condition[lang] : '';
+    const target = address;
+    const targetDe = mode === 'indirect' ? `die nachgeschlagene Adresse ${target}` : `der Adressteil ${target}`;
+    const targetEn = mode === 'indirect' ? `the looked-up address ${target}` : `the address part ${target}`;
     steps.push({
       event: {
         phase: 'execute',
         title: execTitle(jumps ? tr('Sprung', 'jump') : tr('kein Sprung', 'no jump')),
         explanation: name === 'JMP'
-          ? tr(`Unbedingter Sprung: Der Adressteil ${word2} wird in den Befehlszähler geladen.`,
-            `Unconditional jump: the address part ${word2} is loaded into the program counter.`)
+          ? tr(`Unbedingter Sprung: ${targetDe} wird in den Befehlszähler geladen.`,
+            `Unconditional jump: ${targetEn} is loaded into the program counter.`)
           : tr(`${name} springt, ${condText}. Flags: ${flagText(start.flags)} → `, `${name} jumps ${condText}. Flags: ${flagText(start.flags)} → `)
             + (jumps
-              ? tr(`Bedingung erfüllt, der Adressteil ${word2} wird in den Befehlszähler geladen.`,
-                `condition met, the address part ${word2} is loaded into the program counter.`)
+              ? tr(`Bedingung erfüllt, ${targetDe} wird in den Befehlszähler geladen.`,
+                `condition met, ${targetEn} is loaded into the program counter.`)
               : tr(`Bedingung nicht erfüllt, es geht mit Adresse ${pc2} weiter.`,
                 `condition not met, execution continues at address ${pc2}.`)),
         bus: {},
-        flows: jumps ? [{ route: 'ir→pc', label: String(word2) }] : [],
+        flows: jumps ? [{ route: 'ir→pc', label: String(target) }] : [],
         active: jumps ? ['flags', 'decoder', 'pc'] : ['flags', 'decoder'],
       },
       apply(s) {
-        if (jumps) s.pc = word2;
+        if (jumps) s.pc = target;
       },
     });
     return steps;
@@ -388,8 +390,7 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array, la
           s.pc = 0;
           s.flags = { z: false, n: false, v: false, c: false };
           s.ir = { opcode: 0, mode: 'none', address: 0 };
-          s.sp = SP_START;
-          s.lastWrite = null;
+          s.sp = SP_START; // the last written cell stays marked, as with the reset button
           s.halted = 'reset';
         }
       },
@@ -519,6 +520,8 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array, la
 interface StackContext {
   start: InstructionStart;
   word2: number;
+  /** Jump target of JSR (address part, or the looked-up address for JSR (adr)). */
+  target: number;
   pc0: number;
   pc2: number;
   sp: number;
@@ -643,14 +646,17 @@ function planStackInstruction(name: string, c: StackContext): PlannedMicroStep[]
           event: {
             phase: 'execute',
             title: execTitle(tr('Sprung ins Unterprogramm', 'jump into the subroutine')),
-            explanation: tr(`Der Adressteil ${c.word2} wird in den Befehlszähler geladen – weiter geht es im Unterprogramm.`,
-              `The address part ${c.word2} is loaded into the program counter – execution continues in the subroutine.`),
+            explanation: c.target === c.word2
+              ? tr(`Der Adressteil ${c.word2} wird in den Befehlszähler geladen – weiter geht es im Unterprogramm.`,
+                `The address part ${c.word2} is loaded into the program counter – execution continues in the subroutine.`)
+              : tr(`Die nachgeschlagene Adresse ${c.target} wird in den Befehlszähler geladen – weiter geht es im Unterprogramm.`,
+                `The looked-up address ${c.target} is loaded into the program counter – execution continues in the subroutine.`),
             bus: {},
-            flows: [{ route: 'ir→pc', label: String(c.word2) }],
+            flows: [{ route: 'ir→pc', label: String(c.target) }],
             active: ['decoder', 'pc'],
           },
           apply(s) {
-            s.pc = c.word2;
+            s.pc = c.target;
           },
         },
       ];

@@ -190,10 +190,36 @@ describe('error messages', () => {
     ]);
   });
 
-  it('mnemonic used as label', () => {
-    expect(errs('load: HALT')[0]).toBe(
-      '1:1 ‚load‘ ist ein Befehlsname und kann nicht als Marke benutzt werden. Wähle einen anderen Namen, z. B. ‚load1‘ oder ‚Wert‘.',
+  it('instruction names are allowed as labels (as in the original)', () => {
+    const r = ok('JMP load\nload: HALT\nWORD: WORD 7\nLOAD WORD');
+    expect(r.labels.get('load')).toBe(2);
+    expect(r.labels.get('WORD')).toBe(4);
+    expect(r.memory[1]).toBe(2); // JMP load
+    expect(r.memory[6]).toBe(4); // LOAD WORD
+    expect(ok('SP: WORD 1').labels.get('SP')).toBe(0); // SP is free outside extended mode
+  });
+
+  it('SP cannot be a label in extended mode', () => {
+    expect(errs('SP: WORD 1', true)[0]).toBe(
+      '1:1 ‚SP‘ ist im erweiterten Modus der Name des Stackpointers und kann nicht als Marke benutzt werden. Wähle einen anderen Namen, z. B. ‚SP1‘ oder ‚Wert‘.',
     );
+  });
+
+  it('underscore in labels (as in the original)', () => {
+    const r = ok('JMP _start\nmy_label: WORD 3\n_start: LOAD my_label');
+    expect(r.labels.get('my_label')).toBe(2);
+    expect(r.labels.get('_start')).toBe(3);
+    expect(r.memory[1]).toBe(3);
+    expect(r.memory[3]).toBe(0x0114); // LOAD my_label
+    expect(r.memory[4]).toBe(2);
+  });
+
+  it('indirect jumps JMP (adr) and JSR (adr) (as in the original)', () => {
+    const r = ok('JMP (zeiger)\nJMPZ (5)\nzeiger: WORD 0');
+    expect([r.memory[0], r.memory[1]]).toEqual([0x0324, 4]);
+    expect([r.memory[2], r.memory[3]]).toEqual([0x0322, 5]);
+    const e = assemble('JSR (8)', { extended: true });
+    expect([e.memory[0], e.memory[1]]).toEqual([0x0305, 8]);
   });
 
   it('label starting with a digit', () => {
@@ -223,7 +249,8 @@ describe('error messages', () => {
 
   it('wrong addressing modes', () => {
     expect(errs('STORE $5')[0]).toMatch(/‚STORE‘ kann nicht mit ‚\$Zahl‘ .* lass das ‚\$‘ weg/);
-    expect(errs('JMP (5)')[0]).toMatch(/Sprungbefehle brauchen eine direkte Adresse/);
+    expect(errs('JMP $5')[0]).toMatch(/Sprungbefehle brauchen eine Adresse: .* indirekt ‚JMP \(Zeiger\)‘/);
+    expect(errs('JMP 2(SP)', true)[0]).toMatch(/Sprungbefehle brauchen eine Adresse/);
     expect(errs('LOADI (5)')[0]).toMatch(/‚LOADI‘ erwartet nur eine Zahl/);
     expect(errs('WORD $5')[0]).toMatch(/Nach ‚WORD‘ steht nur eine Zahl/);
   });

@@ -3,7 +3,7 @@
  * and the example program from the manual.
  */
 import { describe, expect, it } from 'vitest';
-import { toSigned16 } from '../src/core';
+import { Cpu, toSigned16 } from '../src/core';
 import { calc, cpuWith, ins } from './helpers';
 
 describe('addressing modes', () => {
@@ -101,6 +101,36 @@ describe('jumps', () => {
   });
 });
 
+describe('indirect jumps (as in the original)', () => {
+  it('JMP (adr) jumps to the address stored in cell adr', () => {
+    const cpu = cpuWith([ins('JMP', 20, 'indirect')], { 20: 8 });
+    cpu.step();
+    expect(cpu.getState().pc).toBe(8);
+  });
+
+  it('conditional indirect jump only jumps if the condition holds', () => {
+    const taken = cpuWith([ins('LOADI', 0), ins('JMPZ', 20, 'indirect')], { 20: 10 });
+    taken.step();
+    taken.step();
+    expect(taken.getState().pc).toBe(10);
+    const notTaken = cpuWith([ins('LOADI', 1), ins('JMPZ', 20, 'indirect')], { 20: 10 });
+    notTaken.step();
+    notTaken.step();
+    expect(notTaken.getState().pc).toBe(4);
+  });
+
+  it('JSR (adr) saves the return address and jumps to the stored address', () => {
+    const cpu = cpuWith([ins('JSR', 20, 'indirect')], { 20: 12 });
+    cpu.extended = true;
+    const sp = cpu.getState().sp;
+    cpu.step();
+    const s = cpu.getState();
+    expect(s.pc).toBe(12);
+    expect(s.sp).toBe((sp - 1) & 0xffff);
+    expect(s.memory[(sp - 1) & 0xffff]).toBe(2);
+  });
+});
+
 describe('control instructions', () => {
   it('NOOP only advances PC', () => {
     const r = calc(5, 'NOOP');
@@ -132,10 +162,34 @@ describe('control instructions', () => {
     expect(cpu.getState().halted).toBe('none');
   });
 
-  it('an illegal code halts with PC on it', () => {
+  it('an illegal code halts, PC already behind it (as in the original)', () => {
     const cpu = cpuWith([ins('LOADI', 1)], { 2: 0xffff });
     expect(cpu.run(10)).toEqual({ reason: 'illegalOpcode', steps: 2 });
-    expect(cpu.getState().pc).toBe(2);
+    expect(cpu.getState().pc).toBe(4);
+  });
+
+  it('instructions without address need address part 0 (as in the original)', () => {
+    for (const name of ['NOOP', 'HALT', 'NOT', 'LOADC', 'RESET']) {
+      const cpu = cpuWith([[ins(name)[0], 5]]);
+      expect(cpu.step(), name).toBe('illegalOpcode');
+      expect(cpu.getState().pc, name).toBe(2);
+    }
+  });
+
+  it('stack instructions are illegal outside extended mode (as in the original)', () => {
+    for (const enc of [ins('PUSH'), ins('POP'), ins('RTS'), ins('JSR', 8), ins('RSV', 1), ins('REL', 1)]) {
+      const cpu = cpuWith([enc]);
+      expect(cpu.step()).toBe('illegalOpcode');
+      const ext = cpuWith([enc]);
+      ext.extended = true;
+      expect(ext.step()).not.toBe('illegalOpcode');
+    }
+  });
+
+  it('runs into the two top cells (-1) and stops there (as in the original)', () => {
+    const cpu = new Cpu(); // fresh memory: cells 65534/65535 = 0xFFFF
+    cpu.restore({ ...cpu.snapshot(), pc: 65534 });
+    expect(cpu.step()).toBe('illegalOpcode');
   });
 
   it('run() stops at the step limit (endless loop)', () => {

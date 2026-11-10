@@ -14,8 +14,8 @@
  */
 
 import { alu, ALU_INSTRUCTIONS, ALU_SYMBOLS, JUMP_CONDITIONS, type Flags } from './alu';
-import { MEMORY_SIZE, toUnsigned16, WORD_MASK } from './format';
-import { decodeWord1, SP_START, type AddressingMode, type InstructionDef } from './isa';
+import { createClearedMemory, MEMORY_SIZE, toUnsigned16, WORD_MASK } from './format';
+import { decodeInstruction, SP_START, type AddressingMode, type InstructionDef } from './isa';
 import type { Language } from './lang';
 import { planInstruction, type MicroContext, type MicroEnv, type MicroStepEvent } from './microcode';
 
@@ -36,7 +36,7 @@ export interface InstructionRegister {
  * - none: ready to execute the next instruction
  * - halt: HALT/HOLD was executed
  * - reset: the RESET instruction was executed
- * - illegalOpcode: word 1 at PC is not a valid instruction (PC stays there)
+ * - illegalOpcode: the instruction is not valid (as in the original, PC already points behind it)
  * - divisionByZero: division by 0 (PC stays on the instruction, nothing changed)
  */
 export type HaltReason = 'none' | 'halt' | 'reset' | 'illegalOpcode' | 'divisionByZero';
@@ -96,7 +96,7 @@ export interface RunResult {
 const CLEARED_FLAGS: Readonly<Flags> = { z: false, n: false, v: false, c: false };
 
 
-/** Creates the state of a freshly powered-on machine (all zero). */
+/** Creates the state of a freshly powered-on machine (registers 0, memory cleared). */
 export function createInitialState(): CpuState {
   return {
     a: 0,
@@ -104,7 +104,7 @@ export function createInitialState(): CpuState {
     sp: SP_START,
     ir: { opcode: 0, mode: 'none', address: 0 },
     flags: { ...CLEARED_FLAGS },
-    memory: new Uint16Array(MEMORY_SIZE),
+    memory: createClearedMemory(),
     halted: 'none',
     lastWrite: null,
     micro: null,
@@ -135,6 +135,11 @@ export class Cpu {
   private writeLog: Array<[number, number]> | null = null;
   /** Language of the micro step explanations (does not influence the execution). */
   language: Language = 'de';
+  /**
+   * Extended mode (stack pointer). As in the original, the stack instructions
+   * JSR, RTS, PUSH, POP, RSV and REL are illegal instruction codes without it.
+   */
+  extended = false;
   /** Memory access for micro steps (logs writes for undo). */
   private readonly env: MicroEnv = { write: (address, value) => this.write(address, value) };
 
@@ -145,7 +150,8 @@ export class Cpu {
 
   /**
    * "CPU zurücksetzen" (manual): PC = 0, A = 0, all flags cleared.
-   * The memory is NOT changed.
+   * The memory is NOT changed, and (as in the original) the most recently
+   * written cell stays marked.
    */
   reset(): void {
     const s = this.state;
@@ -155,7 +161,6 @@ export class Cpu {
     s.ir = { opcode: 0, mode: 'none', address: 0 };
     s.halted = 'none';
     s.sp = SP_START;
-    s.lastWrite = null;
     s.micro = null;
     s.lastAlu = null;
   }
@@ -166,6 +171,12 @@ export class Cpu {
       throw new RangeError(`memory must have ${MEMORY_SIZE} cells`);
     }
     this.state.memory = memory.slice();
+  }
+
+  /** "Speicher löschen": clears the memory (cells 65534/65535 = 0xFFFF); registers stay. */
+  clearMemory(): void {
+    this.state.memory = createClearedMemory();
+    this.state.lastWrite = null;
   }
 
   /** Writes a single memory cell (used when the user edits memory). */
@@ -194,15 +205,16 @@ export class Cpu {
     const word1 = this.read(instructionAddress);
     const word2 = this.read(instructionAddress + 1);
 
+    s.pc = toUnsigned16(instructionAddress + 2);
+
     // ----- decode -----
-    const decoded = decodeWord1(word1);
+    const decoded = decodeInstruction(word1, word2, this.extended);
     s.ir = { opcode: word1 & 0xff, mode: decoded?.mode ?? null, address: word2 };
     if (!decoded) {
-      // TODO(compat): behaviour of the original on illegal codes not yet verified.
+      // As in the original (Java source): halt, PC already points behind the instruction.
       s.halted = 'illegalOpcode';
       return s.halted;
     }
-    s.pc = toUnsigned16(instructionAddress + 2);
 
     // ----- execute -----
     this.execute(decoded.def, decoded.mode, word2);
@@ -230,7 +242,7 @@ export class Cpu {
       };
     }
     const context = s.micro;
-    const plan = planInstruction(context.start, s.memory, this.language);
+    const plan = planInstruction(context.start, s.memory, this.language, this.extended);
     const index = context.index;
     const planned = plan[index];
     if (!planned) throw new Error('micro step index out of range');
@@ -335,6 +347,11 @@ export class Cpu {
     }
   }
 
+  /** Target of a jump or JSR: the address part, or for "(adr)" the address stored there. */
+  private jumpTarget(mode: AddressingMode, address: number): number {
+    return mode === 'indirect' ? this.read(address) : address;
+  }
+
   /** Memory address an instruction writes to (STORE). */
   private effectiveAddress(mode: AddressingMode, address: number): number {
     switch (mode) {
@@ -358,7 +375,7 @@ export class Cpu {
     // Jumps: only change PC, flags stay as they are.
     const condition = JUMP_CONDITIONS[name];
     if (condition) {
-      if (condition(s.flags)) s.pc = address;
+      if (condition(s.flags)) s.pc = this.jumpTarget(mode, address);
       return;
     }
 
@@ -412,11 +429,13 @@ export class Cpu {
         return;
 
       // ----- extended mode: stack (grows downwards, SP points to the top element) -----
-      case 'JSR':
+      case 'JSR': {
+        const target = this.jumpTarget(mode, address); // looked up before the stack changes
         s.sp = (s.sp - 1) & WORD_MASK;
         this.write(s.sp, s.pc); // PC already points to the next instruction
-        s.pc = address;
+        s.pc = target;
         return;
+      }
       case 'RTS':
         s.pc = this.read(s.sp);
         s.sp = (s.sp + 1) & WORD_MASK;

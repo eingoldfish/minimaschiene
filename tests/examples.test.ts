@@ -7,6 +7,7 @@ describe('example programs', () => {
     const r = assemble(example.source, { extended: example.extended });
     expect(r.errors.map((e) => formatError(e))).toEqual([]);
     const cpu = new Cpu();
+    cpu.extended = example.extended;
     cpu.loadMemory(r.memory);
     expect(cpu.run(100_000).reason).toBe('halt');
     const address = r.labels.get(example.check.label);

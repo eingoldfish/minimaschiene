@@ -15,12 +15,11 @@
  *             | Adresse "(SP)" | "@" Adresse "(SP)" | "$" Adresse "(SP)" ] .
  *   Adresse = Marke | Zahl | HexZahl .
  */
-import { MEMORY_SIZE, toUnsigned16 } from './format';
+import { createClearedMemory, MEMORY_SIZE, toUnsigned16 } from './format';
 import type { Language } from './lang';
 import {
   allMnemonicNames,
   encodeWord1,
-  isReservedName,
   lookupMnemonic,
   WORD_DIRECTIVE,
   type AddressingMode,
@@ -99,7 +98,8 @@ interface Token {
   value?: number;
 }
 
-const LETTERS = 'A-Za-zÄÖÜäöüß';
+/** Letters allowed in names; "_" is allowed everywhere, as in the original. */
+const LETTERS = 'A-Za-zÄÖÜäöüß_';
 const IDENT_RE = new RegExp(`[${LETTERS}][${LETTERS}0-9]*`, 'y');
 const NUMBER_RE = /0[xX][0-9A-Fa-f]*|[0-9]+/y;
 const SYMBOLS = ':()$@-';
@@ -473,7 +473,7 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
   const labelLines = new Map<string, number>();
   const lineToAddress = new Map<number, number>();
   const addressToLine = new Map<number, number>();
-  const memory = options.keepMemory ? options.keepMemory.slice() : new Uint16Array(MEMORY_SIZE);
+  const memory = options.keepMemory ? options.keepMemory.slice() : createClearedMemory();
 
   // ----- pass 1: parse lines, assign addresses, collect labels -----
   const items: Item[] = [];
@@ -492,11 +492,13 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
 
     if (parsed.label) {
       const { name, column } = parsed.label;
-      if (isReservedName(name)) {
+      // As in the original, instruction names may be labels ("load:"); only "SP" is
+      // reserved, and only in extended mode, where it is part of "adr(SP)".
+      if (options.extended && name.toUpperCase() === 'SP') {
         errors.push({
           line: lineNo, column, length: name.length,
-          message: tr(`‚${name}‘ ist ein Befehlsname und kann nicht als Marke benutzt werden.`,
-            `‘${name}’ is an instruction name and cannot be used as a label.`),
+          message: tr(`‚${name}‘ ist im erweiterten Modus der Name des Stackpointers und kann nicht als Marke benutzt werden.`,
+            `In extended mode ‘${name}’ is the name of the stack pointer and cannot be used as a label.`),
           hint: tr(`Wähle einen anderen Namen, z. B. ‚${name}1‘ oder ‚Wert‘.`, `Choose another name, e.g. ‘${name}1’ or ‘value’.`),
         });
       } else if (labels.has(name)) {
@@ -664,8 +666,8 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
       if (!def.modes.includes(mode)) {
         let hint: string | undefined;
         if (def.group === 'jump') {
-          hint = tr(`Sprungbefehle brauchen eine direkte Adresse: ‚${op.name} 20‘ oder ‚${op.name} Marke‘.`,
-            `Jump instructions need a direct address: ‘${op.name} 20’ or ‘${op.name} label’.`);
+          hint = tr(`Sprungbefehle brauchen eine Adresse: ‚${op.name} 20‘, ‚${op.name} Marke‘ oder indirekt ‚${op.name} (Zeiger)‘.`,
+            `Jump instructions need an address: ‘${op.name} 20’, ‘${op.name} label’ or indirect ‘${op.name} (pointer)’.`);
         } else if (def.mnemonic === 'STORE' && mode === 'immediate') {
           hint = tr('STORE schreibt in eine Speicherzelle – lass das ‚$‘ weg.', 'STORE writes into a memory cell – leave out the ‘$’.');
         }

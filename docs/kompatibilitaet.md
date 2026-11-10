@@ -21,15 +21,15 @@ Status: **offen** = noch nicht geklärt · **Annahme** = so umgesetzt, aber nich
 | 9 | Dateiendung für Assemblerdateien | Annahme (M6) | `.mia`, zentral in `src/storage/files.ts` (`FILE_EXTENSION`). Beim Öffnen werden auch `.txt` und `.asm` angenommen. Im Original prüfen: Programm speichern und die Endung ansehen. |
 | 10 | Shifts um ≥ 16 Stellen | geklärt (Test 4) | **Schiebeweite modulo 32, gerechnet auf 32 Bit, Ergebnis auf 16 Bit abgeschnitten** (wie JavaScript `<<`, `>>>`, `>>`). `5 SHLI 16` = 0, `5 SHLI 17` = 0, `5 SHLI 100` = 80 (100 mod 32 = 4), `5 SHLI -1` = 0 (−1 mod 32 = 31), `-1 SHRI 16` = 0, `-32768 SHRAI 16` = −1, `-32768 SHRAI 15` = −1, `5 SHLI 0` = 5. Weder Modulo 16 noch Fehlermeldung. |
 | 11 | Speicherlayout beim Assemblieren | beobachtet (Test 2) | Die Befehle liegen ab Adresse 0 lückenlos mit je 2 Worten, `WORD`-Zellen schließen direkt an. In Test 2 wurde `STORE schritt` zu Adresse 75 übersetzt (37 Befehle = 74 Worte, `null` = 74, `schritt` = 75). Mit auskommentierten Fällen ergaben sich andere Adressen, z. B. 73. Exakte Adressgleichheit mit dem Original ist kein Muss, wird aber notiert. |
-| 12 | Ungültiger Befehlscode (unbekannter Opcode oder unbekannte Adressierungsart in Wort 1) | Annahme (M1) | Maschine hält an, der PC bleibt auf dem ungültigen Befehl. Als ungültig gilt auch eine Adressierungsart, die der Befehl nicht erlaubt (z. B. `STORE` immediate = 0x0215, `NOT` mit Art 1, Sprünge mit Art 2/3). Prüfbar mit Speicher-Editieren im Original. |
+| 12 | Ungültiger Befehlscode | geklärt (Java-Quelltext) | Maschine hält an, der **PC steht wie im Original schon hinter dem Befehl** (+2); die Meldung nennt die Adresse des fehlerhaften Befehls, im Editor wird seine Zeile rot markiert. Ungültig sind: unbekannter Opcode oder unbekannte Art, eine Art, die der Befehl nicht erlaubt (z. B. `STORE` immediate = 0x0215, `NOT` mit Art 1, Sprünge mit Art 2), **ein Adressteil ≠ 0 bei Befehlen ohne Adresse** (z. B. `NOOP 5`) und **Stackbefehle ohne erweiterten Modus**. Nicht übernommen: Das Original nimmt auch Arten 7–255 an (Operand 0); das ist nur durch Speicher-Editieren erreichbar. |
 | 13 | PC nach `HALT` | Annahme (M1) | Der PC zeigt hinter den `HALT`-Befehl (normaler Befehlszyklus: PC wird beim Holen um 2 erhöht). |
-| 14 | Indirekte Sprünge (`JMP (adr)`) | Annahme (M1) | Nicht erlaubt; Sprünge kennen nur direkte Adressen. Im Original prüfen, ob der Assembler `JMP (10)` annimmt. |
-| 15 | Groß-/Kleinschreibung bei Marken | Annahme (M2) | Marken unterscheiden Groß- und Kleinschreibung (`Ende` ≠ `ende`), Befehle nicht. Bei einem Treffer, der sich nur in der Schreibweise unterscheidet, gibt der Assembler einen Hinweis. Im Original prüfen. |
-| 16 | Befehlsnamen als Marken | Annahme (M2) | Nicht erlaubt (z. B. `load:`, `word:`, `sp:`), auch keine Namen der Stackbefehle. |
+| 14 | Indirekte Sprünge (`JMP (adr)`) | geklärt (Java-Quelltext) | **Erlaubt** wie im Original: Alle Sprünge und `JSR` akzeptieren `(adr)` und springen zur Adresse, die in Zelle `adr` steht (z. B. `JMP (10)` = 0x0324). `JSR` liest das Sprungziel, bevor der Stack verändert wird. Nicht übernommen: Sprünge mit `@x(SP)` und `JSR` mit `x(SP)`/`$x(SP)`, siehe `abgleich-java.md`. |
+| 15 | Groß-/Kleinschreibung bei Marken | geklärt (Java-Quelltext) | Marken unterscheiden Groß- und Kleinschreibung (`Ende` ≠ `ende`), Befehle nicht. Bei einem Treffer, der sich nur in der Schreibweise unterscheidet, gibt der Assembler einen Hinweis. Im Original prüfen. |
+| 16 | Befehlsnamen als Marken | geklärt (Java-Quelltext) | **Erlaubt** wie im Original (z. B. `load:`, `WORD:`, `JMP load`). Nur `SP` (in jeder Schreibweise) ist im erweiterten Modus als Marke verboten. |
 | 17 | Negative Zahlen und Marken als Zahlenwert | Annahme (M2) | Negative Zahlen (−32768 … −1) gibt es nur bei Immediate (`LOADI -7`, `ADD $-1`) und `WORD`. Eine negative Adresse (`LOAD -1`) ist ein Fehler. `LOADI Marke` und `WORD Marke` sind erlaubt und liefern die Adresse der Marke. |
 | 18 | Reihenfolge bei `PUSH`/`POP`/`JSR`/`RTS` | `PUSH` geklärt (Test 3b), Rest Annahme | `PUSH` verringert erst SP und schreibt dann nach Speicher[SP]: nach `LOADI 7`, `PUSH`, `LOAD 0(SP)` steht 7 im Akku, die 7 liegt also in Zelle 65533. Entsprechend (Annahme, passend zum Manual): `JSR` erst SP − 1, dann Rücksprungadresse ablegen; `POP` und `RTS` erst lesen, dann SP + 1. |
 | 19 | Flags der Stackbefehle | `POP` geklärt (Test 3b), Rest Annahme | `POP` setzt Z/N wie `LOAD` und löscht V und C: nach `LOADI -5`, `PUSH`, `LOADI 1`, `CMPI 2` (N=1, C=1) liefert `POP` Akku = −5 mit N=1, Z=V=C=0. `PUSH`, `JSR`, `RTS`, `RSV`, `REL` lassen die Flags unverändert (Annahme). |
-| 20 | Stackbefehle ohne erweiterten Modus | Annahme (M5) | Der Assembler lehnt Stackbefehle und SP-Adressierung ohne „Erweiterter Modus“ ab. Die CPU führt sie aber aus, falls sie (z. B. durch Speicher-Editieren) im Speicher stehen. |
+| 20 | Stackbefehle ohne erweiterten Modus | geklärt (Java-Quelltext) | Der Assembler lehnt Stackbefehle und SP-Adressierung ohne „Erweiterter Modus“ ab. Die CPU behandelt `JSR`, `RTS`, `PUSH`, `POP`, `RSV`, `REL` wie im Original als ungültigen Befehlscode, wenn der erweiterte Modus aus ist. Umschalten des Modus setzt die CPU zurück (Desktopversion), der Speicher bleibt. |
 | 21 | Negative Offsets bei SP-Adressierung | Annahme (M5) | `LOAD -1(SP)` ist erlaubt (Adresse = SP − 1, mit Überlauf modulo 65536). |
 | 22 | `RSV` und `REL` im Original | beobachtet (Test 3b) – Abweichung | `JSR 8`, `RTS`, `PUSH`, `POP`, `LOAD 2(SP)`, `LOAD @2(SP)`, `LOAD $2(SP)` und `STORE 2(SP)` lassen sich im Original assemblieren, `RSV 3` und `REL 3` nicht – obwohl beide im Manual (3.3 EBNF und 3.4 Befehlsübersicht) stehen. Bei uns bleiben `RSV` und `REL` erhalten, siehe „Bewusste Neuerungen“. In der Ansicht „Opcodes anzeigen“ zeigt das Original alle drei SP-Arten nur als `LOAD 2` (ohne `@`, `$` oder `(SP)`). |
 
@@ -40,11 +40,8 @@ Diese Annahmen sind umgesetzt, aber nicht am Original überprüft. Jeder Test da
 | # | So prüfen | Unsere Annahme |
 |---|---|---|
 | 9 | Ein Programm speichern und die Dateiendung ansehen | `.mia` |
-| 12 | Programm `HALT` assemblieren, Zelle 0 auf `77` ändern, „Einzelschritt“ | Maschine hält an, PC bleibt 0 |
 | 13 | `LOADI 1`, `HALT` ausführen, PC ansehen | PC = 4 (hinter `HALT`) |
-| 14 | `JMP (10)` assemblieren | Fehler: keine indirekten Sprünge |
 | 15 | `JMP ende` mit der Marke `Ende:` assemblieren | Fehler, Marken unterscheiden Groß-/Kleinschreibung |
-| 16 | Marke `load:` verwenden | Fehler |
 | 17 | `LOAD -1` assemblieren | Fehler; nur Immediate und `WORD` erlauben negative Zahlen |
 | 18 | Erweitert: `JSR 6`, `HALT`, `HALT`, `RTS` – vor/nach `JSR` SP und Zelle 65533 ansehen | `JSR` verringert erst SP, dann wird die Rücksprungadresse 2 (der Befehl nach `JSR`) geschrieben |
 | 19 | Erweitert: `LOADI -1`, `CMPI 5`, `PUSH` – Flags vor und nach `PUSH` | `PUSH`, `JSR`, `RTS` ändern die Flags nicht |
@@ -110,6 +107,17 @@ Vorbelegung der Flags mit `CMPI` (C=1/N=1 bzw. V=1), dann der Befehl.
 - `DIV`: `-32768 DIVI -1` → −32768 (Überlauf wird ohne Abbruch abgeschnitten), N=1, V=0, C=0.
 - **`MULH` = vorzeichenbehaftetes Produkt / 65536, Richtung 0 gerundet** – also *nicht* das echte hohe Wort (arithmetisches Schieben). Belege: `-300 MULHI 300` → −1 (echtes hohes Wort wäre −2), `3 MULHI -1` → 0 (statt −1), `-32768 MULHI 1` → 0, `-32768 MULHI -1` → 0, `300 MULHI 300` → 1. Für positive Produkte stimmen beide Varianten überein. `MULH` setzt Z und N nach dem Ergebnis und löscht V und C.
 
+## Speicher und Bedienung wie im Original (Java-Quelltext)
+
+- **Oberste Zellen:** Nach dem Start, nach „Speicher löschen“ und beim Assemblieren (ohne „Speicher behalten“) stehen in den Zellen 65534 und 65535 jeweils −1 (0xFFFF), alle anderen Zellen sind 0. Ein Programm, das ohne `HALT` durch den leeren Speicher läuft, hält deshalb dort mit „ungültiger Befehl“ an. Beim Kopieren des Speichers zählen diese beiden Zellen mit −1 als leer.
+- **„Speicher löschen“** (Speicherbereich): löscht den Speicher, Akku, Befehlszähler und Flags bleiben.
+- **Ohne Assemblieren ausführen:** Die CPU führt aus, was im Speicher steht, auch wenn man ihn nur von Hand gefüllt hat. Nur bei völlig leerem Speicher kommt der Hinweis „zuerst assemblieren“.
+- **Hex-Ansicht:** Beim Bearbeiten einer Zelle wird die Eingabe als Hexzahl gelesen, auch ohne `0x` (`10` = 16, `FF` = 255). Negative Dezimalzahlen wie `-5` gehen weiterhin.
+
+## Zeichen in Marken
+
+Wie im Original darf in Marken auch der Unterstrich `_` vorkommen, auch am Anfang (`my_label:`, `_start:`). Sonst: Buchstaben inkl. Ä Ö Ü ä ö ü ß und Ziffern (nicht am Anfang).
+
 ## Funde im Manual
 
 | Stelle | Fund | Umgang |
@@ -126,9 +134,9 @@ Vorbelegung der Flags mit `CMPI` (C=1/N=1 bzw. V=1), dann der Befehl.
 - **`RSV n` / `REL n`** (M5, Punkt 22): `RSV 3` und `REL 3` ließen sich im Original nicht assemblieren; bei uns gibt es beide Befehle wie im Manual beschrieben (SP − n bzw. SP + n). Sie reservieren bzw. geben Platz für lokale Variablen auf dem Stack frei. Programme, die sie benutzen, laufen deshalb evtl. nicht im Original.
 - **Speichern, Teilen, Offline** (M6): automatisches Speichern im Browser, Teilen-Link mit dem komprimierten Programm im URL-Fragment (`#code=…`, kein Server), Offline-Nutzung als PWA, sechs eigene Beispielprogramme (Multiplikation, Summe, Maximum, Fakultät, ggT, Unterprogramm).
 - **Mikroschritte mit Erklärung** (M4): Zu jedem Mikroschritt erscheint ein Erklärtext mit den konkreten Werten; Werte wandern animiert über die Busse (abschaltbar, bei `prefers-reduced-motion` aus). Auch Mikroschritte lassen sich mit „Schritt zurück“ einzeln zurücknehmen; „Schritt“ führt einen angefangenen Befehl zu Ende.
-- **Abbruchschranke** (M3): Sie greift nur beim Tempo „Maximal“. Bei langsamem Tempo sieht man das Programm laufen und kann jederzeit „Pause“ drücken; eine Zeitgrenze würde dort längere, aber korrekte Programme abbrechen.
+- **Abbruchschranke** (M3): Sie greift nur beim Tempo „Maximal“. Bei langsamem Tempo sieht man das Programm laufen und kann jederzeit „Pause“ drücken; eine Zeitgrenze würde dort längere, aber korrekte Programme abbrechen. Wenn sie greift, sind wie im Original „Ausführen“ und „Schritt“ gesperrt, bis man zurücksetzt oder neu assembliert („Schritt zurück“ geht weiterhin).
 - **Hervorhebung nach HALT** (M3): Der PC zeigt nach `HALT` hinter den Befehl (Punkt 13). Im Editor wird trotzdem die `HALT`-Zeile markiert, weil die nächste Zeile oft schon Daten sind.
-- **Zuletzt geänderte Zelle** (M3): bleibt markiert, bis die nächste Zelle geschrieben wird (durch `STORE` oder durch Bearbeiten im Speicher).
+- **Zuletzt geänderte Zelle** (M3): bleibt markiert, bis die nächste Zelle geschrieben wird (durch `STORE` oder durch Bearbeiten im Speicher). Wie im Original bleibt sie auch beim Zurücksetzen markiert; „Speicher löschen“ entfernt die Markierung.
 - **Opcode-Ansicht** (Disassembler): Befehle werden in Eingabesyntax angezeigt, also `LOAD (11)` statt `LOAD @ 11` wie im Original, damit man sie direkt in den Editor kopieren kann. Auf Wunsch erscheinen Marken statt Adressen (`JMP Start`). Immediate-Werte werden mit Vorzeichen gezeigt (`LOADI -7`).
 - Schritt zurück, Haltepunkte, Marken neben Speicherzellen, animierte Mikroschritte mit Erklärtext (siehe Projekt-Instruktionen, Abschnitt 6).
 - **Division durch 0** (Vorschlag, Punkt 5): Die Maschine hält an, statt zurückzusetzen. Akku, Flags und Speicher bleiben unverändert, und der PC zeigt auf den auslösenden Befehl, damit man den Fehler untersuchen und mit „Schritt zurück“ zurückgehen kann. Die Meldung erscheint in der Oberfläche (Statuszeile, Befehl rot markiert), nicht als Browser-Pop-up, zum Beispiel: „Division durch 0 bei Adresse 6 (DIVI 0) – Programm angehalten.“ Das betrifft alle sechs Divisions- und Modulobefehle samt Immediate-Varianten.

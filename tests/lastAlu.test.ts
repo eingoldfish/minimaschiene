@@ -5,6 +5,7 @@ function run(source: string, steps: number, extended = false): Cpu {
   const r = assemble(source, { extended });
   expect(r.errors).toEqual([]);
   const cpu = new Cpu();
+  cpu.extended = extended;
   cpu.loadMemory(r.memory);
   for (let i = 0; i < steps; i++) cpu.step();
   return cpu;

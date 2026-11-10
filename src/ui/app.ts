@@ -5,7 +5,7 @@
  * Rule: the UI never changes the CPU directly, only through Session/Core
  * methods. After every action, render() redraws everything from the state.
  */
-import { assemble as assembleSource, disassembleAt, type AssembleError, type CyclePhase, type Language, type MicroStepEvent } from '../core';
+import { assemble as assembleSource, decodeWord1, disassembleAt, type AssembleError, type CyclePhase, type Language, type MicroStepEvent } from '../core';
 import { DiagramView } from './diagramView';
 import { h, setChildren } from './dom';
 import { createEditor, type ProgramEditor } from './editor';
@@ -91,6 +91,8 @@ export class App {
   private machineTab: 'diagram' | 'registers' = 'diagram';
   /** Extended mode: stack pointer and stack instructions. */
   private extended = false;
+  /** Set when the time limit stopped a run: like the original, Run/Step stay blocked until reset or assemble. */
+  private timedOut = false;
   private beamer = false;
   /** Theme before the projector mode switched to light (restored afterwards). */
   private themeBeforeBeamer: Theme | null = null;
@@ -136,6 +138,7 @@ export class App {
     this.applySavedSettings(loadSettings());
     setLanguage(this.language);
     this.session = carry?.session ?? new Session();
+    this.session.cpu.extended = this.extended;
     this.session.setLanguage(this.language);
     this.diagram = new DiagramView(); // its labels need the language
     if (carry) {
@@ -324,6 +327,7 @@ export class App {
         menu(d.memoryView, { class: 'small', title: d.memoryViewTitle, phoneOnly: true },
           h('label', { class: 'check' }, followBox, d.followPc),
           button(d.toPc, () => this.memory.scrollToAddress(this.session.state.pc, true), { class: 'small' }),
+          button(d.clearMemory, () => this.clearMemory(), { class: 'small', title: d.clearMemoryTitle }),
           this.spButton,
           button(d.toAddressPart, () => this.memory.scrollToAddress(this.session.state.ir.address, true),
             { class: 'small', title: d.toAddressPartTitle }),
@@ -657,6 +661,7 @@ export class App {
     this.showErrors(result.errors);
     if (result.ok) {
       this.programStale = false;
+      this.timedOut = false;
       if (result.size === 0) {
         this.setStatus(t().emptyProgram, 'warning');
       } else {
@@ -691,6 +696,7 @@ export class App {
     this.leaveMicroView();
     const wasMicro = this.session.state.micro !== null;
     if (this.session.stepBack()) {
+      this.timedOut = false;
       const nowMicro = this.session.state.micro !== null;
       this.setStatus(wasMicro || nowMicro ? t().backMicro : t().backStep, 'info', true);
     } else {
@@ -732,7 +738,18 @@ export class App {
     this.stopRun();
     this.leaveMicroView();
     this.session.reset();
+    this.timedOut = false;
     this.setStatus(t().resetDone, 'info', true);
+    this.render();
+  }
+
+  /** "Speicher löschen": memory cleared, registers stay (as in the original). */
+  private clearMemory(): void {
+    this.stopRun();
+    this.leaveMicroView();
+    this.session.clearMemory();
+    if (this.session.program) this.programStale = true;
+    this.setStatus(t().memoryCleared, 'info', true);
     this.render();
   }
 
@@ -770,6 +787,7 @@ export class App {
       } while (result.reason === 'none' && performance.now() < end);
       if (result.reason === 'none' && now - this.runStart > this.limitSeconds * 1000) {
         this.stopRun();
+        this.timedOut = true;
         this.setStatus(t().limitReached(this.limitSeconds), 'warning');
         this.render();
         return;
@@ -799,8 +817,12 @@ export class App {
 
   /** Checks that a program was assembled and the machine is not halted. */
   private checkReady(): boolean {
-    if (!this.session.program) {
+    if (!this.session.hasProgram) {
       this.setStatus(t().assembleFirst(keys().assemble), 'warning');
+      return false;
+    }
+    if (this.timedOut) {
+      this.setStatus(t().timedOut, 'info');
       return false;
     }
     if (this.session.state.halted !== 'none') {
@@ -819,9 +841,18 @@ export class App {
       case 'reset':
         this.setStatus(t().stopReset, 'info');
         break;
-      case 'illegalOpcode':
-        this.setStatus(t().stopIllegal(st.pc, st.memory[st.pc] ?? 0), 'error');
+      case 'illegalOpcode': {
+        // As in the original, the PC already points behind the faulty instruction.
+        const at = (st.pc - 2) & 0xffff;
+        const word1 = st.memory[at] ?? 0;
+        const word2 = st.memory[(at + 1) & 0xffff] ?? 0;
+        const known = decodeWord1(word1);
+        let detail = '';
+        if (known?.def.extendedOnly && !this.extended) detail = t().illegalNeedsExtended(known.def.mnemonic);
+        else if (known && known.mode === 'none' && word2 !== 0) detail = t().illegalAddressPart(known.def.mnemonic, word2);
+        this.setStatus(t().stopIllegal(at, word1) + detail, 'error');
         break;
+      }
       case 'divisionByZero':
         this.setStatus(t().stopDivZero(st.pc, disassembleAt(st.memory, st.pc).text), 'error');
         break;
@@ -857,7 +888,12 @@ export class App {
 
   /** @param quiet true when switched on automatically (example/link): no status message */
   private setExtended(on: boolean, quiet = false): void {
+    this.stopRun();
+    this.leaveMicroView();
     this.extended = on;
+    // As in the original (desktop 4.0): switching resets the CPU, memory stays.
+    this.session.setExtended(on);
+    this.timedOut = false;
     this.diagram.setExtended(on);
     this.spButton.hidden = !on;
     const box = document.querySelector<HTMLInputElement>('.extended-box');
@@ -870,9 +906,9 @@ export class App {
     }
     if (this.session.program) {
       this.programStale = true;
-      this.setStatus((on ? t().extendedOn : t().extendedOff) + t().reassemble(keys().assemble), 'info');
+      this.setStatus((on ? t().extendedOn : t().extendedOff) + t().extendedCpuReset + t().reassemble(keys().assemble), 'info');
     } else {
-      this.setStatus(on ? t().extendedOn : t().extendedOff, 'info', true);
+      this.setStatus((on ? t().extendedOn : t().extendedOff) + t().extendedCpuReset, 'info', true);
     }
     this.render();
   }
@@ -1073,9 +1109,9 @@ export class App {
     if (this.followPc) this.memory.scrollToAddress(st.pc);
 
     const isError = st.halted === 'illegalOpcode' || st.halted === 'divisionByZero';
-    // After HALT the PC already points behind it (often into the data);
-    // highlighting the HALT line itself is clearer.
-    const execLine = st.halted === 'halt' && !this.programStale
+    // After HALT or an illegal instruction the PC already points behind it
+    // (often into the data); highlighting the instruction itself is clearer.
+    const execLine = (st.halted === 'halt' || st.halted === 'illegalOpcode') && !this.programStale
       ? s.program?.addressToLine.get((st.pc - 2) & 0xffff)
       : currentLine;
     this.editor.setExecLine(execLine ?? null, isError ? 'error' : 'normal');

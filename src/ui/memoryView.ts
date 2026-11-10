@@ -153,7 +153,7 @@ export class MemoryView {
     const finish = (save: boolean) => {
       if (done) return;
       if (save) {
-        const value = parseWord(input.value);
+        const value = parseWord(input.value, this.opts?.format === 'hex');
         if (value === null) {
           input.classList.add('invalid');
           input.title = t().cellEditInvalid;
