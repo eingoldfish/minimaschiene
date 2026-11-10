@@ -35,7 +35,16 @@ async function transform(bytes: Uint8Array, stream: CompressionStream | Decompre
   return new Uint8Array(await new Response(output).arrayBuffer());
 }
 
-const canCompress = () => typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+/** True if the browser can (de)compress with "deflate-raw" (older browsers only know "gzip"/"deflate"). */
+const canCompress = (): boolean => {
+  try {
+    new CompressionStream('deflate-raw');
+    new DecompressionStream('deflate-raw');
+    return true;
+  } catch {
+    return false; // not defined at all, or "deflate-raw" unknown
+  }
+};
 
 /** Builds the fragment (without "#") for a program. */
 export async function encodeShare(program: SharedProgram): Promise<string> {

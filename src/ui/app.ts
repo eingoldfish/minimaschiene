@@ -260,7 +260,17 @@ export class App {
       h('div', { class: 'panel-head' },
         h('h2', { id: 'h-machine' }, d.machine),
         h('div', { class: 'head-actions' },
-          h('div', { class: 'tabs', role: 'tablist', 'aria-label': d.machineViewLabel }, this.tabButtons.diagram, this.tabButtons.registers),
+          h('div', {
+            class: 'tabs', role: 'tablist', 'aria-label': d.machineViewLabel,
+            // arrow keys switch between the two tabs (usual keyboard behaviour of tabs)
+            onkeydown: (ev: KeyboardEvent) => {
+              if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+              ev.preventDefault();
+              const next = this.machineTab === 'diagram' ? 'registers' : 'diagram';
+              this.setMachineTab(next);
+              this.tabButtons[next].focus();
+            },
+          }, this.tabButtons.diagram, this.tabButtons.registers),
           this.maxButtons.machine)),
       this.tabPanes.diagram, this.tabPanes.registers);
 
@@ -325,7 +335,7 @@ export class App {
       this.memory.element);
 
     const splitter = h('div', {
-      class: 'splitter', role: 'separator', tabindex: '0', 'aria-orientation': 'vertical',
+      class: 'splitter', role: 'separator', tabindex: '0', 'aria-orientation': 'vertical', 'aria-valuemin': '20', 'aria-valuemax': '80',
       'aria-label': d.splitterLabel, title: d.splitterTitle,
       onpointerdown: (ev: PointerEvent) => this.startSplitDrag(ev, splitter),
       ondblclick: () => this.setSplit(50),
@@ -365,6 +375,14 @@ export class App {
     window.addEventListener('pagehide', () => this.autosaveNow(), { signal });
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.autosaveNow(); }, { signal });
     window.addEventListener('hashchange', () => void this.loadFromHash(), { signal });
+    // A programming error must not leave the user puzzled: save the program and say so.
+    const onError = () => {
+      this.stopRun();
+      this.autosaveNow();
+      this.setStatus(t().unexpectedError, 'error');
+    };
+    window.addEventListener('error', onError, { signal });
+    window.addEventListener('unhandledrejection', onError, { signal });
     // In "auto" the switch follows a change of the system setting.
     window.matchMedia(DARK_QUERY).addEventListener('change', () => this.applyTheme(), { signal });
 
@@ -864,6 +882,7 @@ export class App {
     for (const id of ['diagram', 'registers'] as const) {
       this.tabPanes[id].hidden = id !== tab;
       this.tabButtons[id].setAttribute('aria-selected', String(id === tab));
+      this.tabButtons[id].tabIndex = id === tab ? 0 : -1; // Tab key reaches the selected tab only
     }
   }
 

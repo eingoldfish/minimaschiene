@@ -8,7 +8,15 @@ const root = document.querySelector<HTMLElement>('#app');
 if (!root) {
   throw new Error('Element #app not found in index.html');
 }
-new App(root);
+try {
+  new App(root);
+} catch (error) {
+  // The page could not be built at all (e.g. a very old browser): show a plain message instead of an empty page.
+  root.textContent = navigator.language.startsWith('de')
+    ? 'Die Minimaschine konnte nicht gestartet werden. Bitte verwende einen aktuellen Browser (Chrome, Edge, Firefox oder Safari).'
+    : 'The Minimaschine could not be started. Please use an up-to-date browser (Chrome, Edge, Firefox or Safari).';
+  console.error(error);
+}
 
 /**
  * Offline support (PWA): register the service worker (public/sw.js).

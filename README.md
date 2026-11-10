@@ -2,7 +2,7 @@
 
 Ein moderner, im Browser laufender CPU-Simulator nach dem Vorbild der **Minimaschine 4.0** (A. Wiedemann): eine 16-Bit-Akkumulatormaschine für den Informatikunterricht (LehrplanPLUS Bayern, Jgst. 12/13). Eigenständige Neuimplementierung – nur das dokumentierte Verhalten wird nachgebildet.
 
-**Stand:** Meilenstein M6 – vollständiger Befehlssatz inkl. erweitertem Modus, Oberfläche mit Mikroschritt-Schaubild, automatisches Speichern, Dateien öffnen/speichern, Teilen per Link, offline nutzbar (PWA), sechs Beispielprogramme. Es fehlen noch Feinschliff und Deployment (M7).
+**Stand:** Version 1 (Meilenstein M7) – vollständiger Befehlssatz inkl. erweitertem Modus, Oberfläche mit Mikroschritt-Schaubild, Deutsch/Englisch, automatisches Speichern, Dateien öffnen/speichern, Teilen per Link, offline nutzbar (PWA), sechs Beispielprogramme, Veröffentlichung über GitHub Pages.
 
 ## Voraussetzungen
 
@@ -102,10 +102,26 @@ public/
   sw.js             Service Worker: macht die App offline nutzbar
   manifest.webmanifest, icon*.png, icon.svg   App-Name und Symbol zum Installieren
 tests/              Vitest-Tests
+.github/workflows/
+  deploy.yml        Baut, testet und veröffentlicht auf GitHub Pages
 docs/
   kompatibilitaet.md  Annahmen und Abweichungen zum Original
 ```
 
-## Deployment
+## Deployment (GitHub Pages)
 
-Folgt in M7 (Ziel: GitHub Pages; reine statische Dateien aus `dist/`).
+Die App besteht nur aus statischen Dateien (`dist/`) und braucht keinen Server mit eigener Logik.
+
+**Automatisch:** Der Workflow [.github/workflows/deploy.yml](.github/workflows/deploy.yml) läuft bei jedem Push auf `main`. Er installiert die Abhängigkeiten, führt alle Tests und den Typecheck aus, baut die App und veröffentlicht `dist/`. Schlägt ein Test fehl, wird nichts veröffentlicht. Den Fortschritt siehst du im Repository unter **Actions**.
+
+**Einmalig einrichten:** Im Repository auf GitHub unter **Settings → Pages → Build and deployment → Source** den Eintrag **„GitHub Actions“** wählen. Danach ist die App nach jedem Push erreichbar unter:
+
+`https://<github-name>.github.io/<repository>/`
+
+Für dieses Repository also https://eingoidfisch.github.io/minimaschiene/.
+
+**Hinweise**
+
+- Die Pfade sind relativ (`base: './'` in `vite.config.ts`), deshalb funktioniert die App auch in einem Unterordner und auf jedem anderen statischen Webserver: Inhalt von `dist/` hochladen, fertig.
+- Nach einem Update sehen Besucher die neue Version beim nächsten Laden der Seite (der Service Worker holt `index.html` immer zuerst aus dem Netz). Offline läuft weiter die zuletzt geladene Version.
+- Den Workflow kann man unter **Actions → Deploy to GitHub Pages → Run workflow** auch von Hand starten.

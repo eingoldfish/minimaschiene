@@ -33,6 +33,25 @@ Status: **offen** = noch nicht geklärt · **Annahme** = so umgesetzt, aber nich
 | 21 | Negative Offsets bei SP-Adressierung | Annahme (M5) | `LOAD -1(SP)` ist erlaubt (Adresse = SP − 1, mit Überlauf modulo 65536). |
 | 22 | `RSV` und `REL` im Original | beobachtet (Test 3b) – Abweichung | `JSR 8`, `RTS`, `PUSH`, `POP`, `LOAD 2(SP)`, `LOAD @2(SP)`, `LOAD $2(SP)` und `STORE 2(SP)` lassen sich im Original assemblieren, `RSV 3` und `REL 3` nicht – obwohl beide im Manual (3.3 EBNF und 3.4 Befehlsübersicht) stehen. Bei uns bleiben `RSV` und `REL` erhalten, siehe „Bewusste Neuerungen“. In der Ansicht „Opcodes anzeigen“ zeigt das Original alle drei SP-Arten nur als `LOAD 2` (ohne `@`, `$` oder `(SP)`). |
 
+## Noch am Original zu prüfen (Stand M7)
+
+Diese Annahmen sind umgesetzt, aber nicht am Original überprüft. Jeder Test dauert nur einen Moment in der Webversion des Originals. Wenn ein Ergebnis abweicht, wird die Tabelle oben angepasst und ein Test ergänzt.
+
+| # | So prüfen | Unsere Annahme |
+|---|---|---|
+| 9 | Ein Programm speichern und die Dateiendung ansehen | `.mia` |
+| 12 | Programm `HALT` assemblieren, Zelle 0 auf `77` ändern, „Einzelschritt“ | Maschine hält an, PC bleibt 0 |
+| 13 | `LOADI 1`, `HALT` ausführen, PC ansehen | PC = 4 (hinter `HALT`) |
+| 14 | `JMP (10)` assemblieren | Fehler: keine indirekten Sprünge |
+| 15 | `JMP ende` mit der Marke `Ende:` assemblieren | Fehler, Marken unterscheiden Groß-/Kleinschreibung |
+| 16 | Marke `load:` verwenden | Fehler |
+| 17 | `LOAD -1` assemblieren | Fehler; nur Immediate und `WORD` erlauben negative Zahlen |
+| 18 | Erweitert: `JSR 6`, `HALT`, `HALT`, `RTS` – vor/nach `JSR` SP und Zelle 65533 ansehen | `JSR` verringert erst SP, dann wird die Rücksprungadresse 2 (der Befehl nach `JSR`) geschrieben |
+| 19 | Erweitert: `LOADI -1`, `CMPI 5`, `PUSH` – Flags vor und nach `PUSH` | `PUSH`, `JSR`, `RTS` ändern die Flags nicht |
+| 21 | Erweitert: `LOADI 7`, `PUSH`, `LOAD -1(SP)` assemblieren | erlaubt (Adresse SP − 1) |
+
+Punkt 8 (genaue Aufteilung der Mikroschritte) und Punkt 20 (Stackbefehle ohne erweiterten Modus) sind eigene didaktische Entscheidungen und müssen nicht dem Original entsprechen.
+
 ## Opcode-Tabelle (am Original ermittelt)
 
 **Wort 1 = Adressierungsart · 256 + Opcode** (High-Byte = Art, Low-Byte = Opcode). Wort 2 = Adressteil, bei Befehlen ohne Adresse 0.

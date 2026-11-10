@@ -252,6 +252,7 @@ const de = {
   codeCopied: (lines: number) => `Programmtext kopiert (${lines} Zeilen).`,
   memoryCopied: (last: number, stack: boolean) => `Speicher kopiert: Zellen 0 bis ${last}${stack ? ' und der Stack' : ''} – als Tabelle, z. B. zum Einfügen in eine Tabellenkalkulation.`,
   memoryEmpty: 'Der Speicher ist leer – es gibt nichts zu kopieren.',
+  unexpectedError: 'Ups – in der App ist ein unerwarteter Fehler aufgetreten. Dein Programm ist gespeichert; lade die Seite neu, falls etwas nicht mehr funktioniert.',
   copyFailed: 'Kopieren hat nicht geklappt – der Browser hat den Zugriff auf die Zwischenablage verweigert.',
   copyPrompt: 'Zum Kopieren markieren (Strg+C):',
 };
@@ -492,6 +493,7 @@ const en: Dictionary = {
   codeCopied: (lines: number) => `Program text copied (${lines} ${lines === 1 ? 'line' : 'lines'}).`,
   memoryCopied: (last: number, stack: boolean) => `Memory copied: cells 0 to ${last}${stack ? ' and the stack' : ''} – as a table, e.g. to paste into a spreadsheet.`,
   memoryEmpty: 'The memory is empty – there is nothing to copy.',
+  unexpectedError: 'Oops – an unexpected error happened in the app. Your program is saved; reload the page if something no longer works.',
   copyFailed: 'Copying did not work – the browser denied access to the clipboard.',
   copyPrompt: 'Select to copy (Ctrl+C):',
 };

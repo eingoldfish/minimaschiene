@@ -7,5 +7,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // tests/styles.test.ts reads styles.css as text; without this, Vitest replaces CSS by an empty file
+    css: { include: [/styles\.css/] },
   },
 });
