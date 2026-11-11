@@ -10,6 +10,8 @@ import '@fontsource/ibm-plex-mono/latin-500.css';
 import '@fontsource/ibm-plex-mono/latin-600.css';
 import './styles.css';
 import { App } from './ui/app';
+import { t } from './ui/i18n';
+import { playSplash } from './ui/splash';
 
 const root = document.querySelector<HTMLElement>('#app');
 if (!root) {
@@ -17,6 +19,8 @@ if (!root) {
 }
 try {
   new App(root);
+  // Start animation: only here, i.e. when the page is loaded or reloaded.
+  playSplash(t().appTitle);
 } catch (error) {
   // The page could not be built at all (e.g. a very old browser): show a plain message instead of an empty page.
   root.textContent = navigator.language.startsWith('de')

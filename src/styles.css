@@ -2391,3 +2391,71 @@ input[type='number'],
     display: block;
   }
 }
+
+/* ---------- Start animation (see splash.ts) ---------- */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.splash-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  font-family: var(--font-mono);
+  font-size: clamp(1.4rem, 6.5vw, 4.2rem);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--text);
+  perspective: 600px;
+}
+
+.splash-chip {
+  --chip: 1.6em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+}
+
+.splash-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--chip);
+  height: var(--chip);
+  background: var(--accent-strong);
+}
+
+.splash-core {
+  width: 36%;
+  height: 36%;
+  background: var(--surface);
+}
+
+.splash-pin {
+  width: 73%;
+  height: calc(var(--chip) * 0.09);
+  background: var(--accent-strong);
+}
+
+.splash-name {
+  display: flex;
+  white-space: nowrap;
+}
+
+.splash-letter {
+  display: inline-block;
+  transform-origin: left center;
+}
+
+/* the small chip in the header stays hidden until the big one has landed there */
+.splash-running h1::before {
+  visibility: hidden;
+}
