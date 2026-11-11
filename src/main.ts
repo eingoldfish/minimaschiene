@@ -34,6 +34,8 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     navigator.serviceWorker
       .register('./sw.js')
       .then(() => navigator.serviceWorker.ready)
+      // Load the guide (a chunk of its own) in the background, so it is in the list below and works offline, too.
+      .then((registration) => import('./ui/guide/view').then(() => registration, () => registration))
       .then((registration) => {
         // Tell the service worker which files this page loaded, so they are cached right away.
         const urls = [

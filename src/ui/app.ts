@@ -20,6 +20,9 @@ import { MachineView } from './machineView';
 import { MemoryView } from './memoryView';
 import { memoryAsTable, type MemoryFormat } from './memoryTable';
 import { Session, type StopReason } from './session';
+import { guideHash, parseGuideHash } from './guide/route';
+// The guide itself is loaded on demand (own chunk, see syncGuide and main.ts).
+import type { GuideView } from './guide/view';
 
 type StatusKind = 'info' | 'success' | 'warning' | 'error';
 type Theme = 'auto' | 'light' | 'dark';
@@ -54,6 +57,8 @@ interface AppCarry {
   scrollY: number;
   machineTab: 'diagram' | 'registers';
   maximized: Maximized;
+  /** The guide was opened with the button (closing it goes back in the history). */
+  guideOpenedHere: boolean;
 }
 
 /** Button with a visible keyboard shortcut. */
@@ -101,6 +106,14 @@ export class App {
   /** Width of the program panel in percent of the area next to the machine (wide screens). */
   private splitPercent = 50;
 
+  // ----- guide (#anleitung) -----
+  /** The guide page, built the first time it is opened. */
+  private guide: GuideView | null = null;
+  /** The guide was opened with the button in the options menu (not by a link). */
+  private guideOpenedHere = false;
+  /** Scroll position of the machine page, restored when the guide is closed. */
+  private appScrollY = 0;
+
   // ----- file -----
   /** Name of the opened/saved file, null if never saved. */
   private fileName: string | null = loadFileName();
@@ -134,6 +147,7 @@ export class App {
   private readonly mainEl: HTMLElement;
   private readonly maxButtons: Record<'editor' | 'machine', HTMLButtonElement>;
   private readonly fullscreenButton: HTMLButtonElement;
+  private readonly footerEl: HTMLElement;
 
   constructor(private readonly root: HTMLElement, carry?: AppCarry) {
     this.applySavedSettings(loadSettings());
@@ -149,6 +163,7 @@ export class App {
       this.programStale = carry.programStale;
       this.machineTab = carry.machineTab;
       this.maximized = carry.maximized;
+      this.guideOpenedHere = carry.guideOpenedHere;
     } else if (window.matchMedia(PHONE_QUERY).matches) {
       // Small screens: the registers are easier to read than the small diagram.
       this.machineTab = 'registers';
@@ -211,7 +226,8 @@ export class App {
               h('input', { type: 'checkbox', checked: this.extended, class: 'extended-box', onchange: (ev: Event) => this.setExtended((ev.target as HTMLInputElement).checked) }),
               d.extended),
             // phones: the colour scheme is in this menu, on wider screens it has its own button
-            themeSwitch('phone-only', d.darkMode)).element,
+            themeSwitch('phone-only', d.darkMode),
+            button(d.guide, () => this.openGuide(), { class: 'menu-guide', title: d.guideTitle })).element,
           button(d.beamer, () => this.toggleBeamer(), { class: 'subtle wide-only', title: d.beamerTitle }),
           themeSwitch('wide-only'),
           h('button', { type: 'button', class: 'subtle lang-btn', title: d.langSwitchTitle, 'aria-label': d.langSwitchTitle,
@@ -363,7 +379,7 @@ export class App {
     // ----- footer: version (date of the last commit, see vite.config.ts) and a link to the author -----
     const [year, month, day] = __BUILD_DATE__.split('-');
     const versionDate = this.language === 'de' ? `${day}.${month}.${year}` : __BUILD_DATE__;
-    const footer = h('footer', { class: 'app-footer' },
+    const footer = this.footerEl = h('footer', { class: 'app-footer' },
       h('span', {}, 'Minimaschine Web'),
       h('span', {}, `${d.footerVersion} ${versionDate}`, __BUILD_COMMIT__ ? h('span', { class: 'mono muted' }, ` · ${__BUILD_COMMIT__}`) : null),
       h('span', {}, `${d.footerBy} `,
@@ -394,7 +410,7 @@ export class App {
     // Save immediately when the page is closed or hidden (the timer might not run anymore).
     window.addEventListener('pagehide', () => this.autosaveNow(), { signal });
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.autosaveNow(); }, { signal });
-    window.addEventListener('hashchange', () => void this.loadFromHash(), { signal });
+    window.addEventListener('hashchange', () => { void this.loadFromHash(); void this.syncGuide(); }, { signal });
     document.addEventListener('fullscreenchange', () => this.updateFullscreenButton(), { signal });
     // A programming error must not leave the user puzzled: save the program and say so.
     const onError = () => {
@@ -416,12 +432,14 @@ export class App {
     if (carry) {
       this.setStatus(d.languageChanged, 'info', true);
       this.render();
-      window.scrollTo(0, carry.scrollY);
+      // after a language switch in the guide: open it again at the same place
+      void this.syncGuide().then(() => { if (this.guide?.element.isConnected) window.scrollTo(0, carry.scrollY); });
       return;
     }
     this.setStatus(autosaved === null ? d.welcome : d.welcomeBack, 'info', true);
     this.render();
     void this.loadFromHash();
+    void this.syncGuide();
   }
 
   /** Switches between German and English by rebuilding the page; the machine and the program stay. */
@@ -443,11 +461,64 @@ export class App {
       scrollY: window.scrollY,
       machineTab: this.machineTab,
       maximized: this.maximized,
+      guideOpenedHere: this.guideOpenedHere,
     };
     window.clearTimeout(this.statusTimer);
     this.listeners.abort();
     this.editor.destroy();
     new App(this.root, carry);
+  }
+
+  // ==================================================================
+  // Guide (#anleitung): a page of its own instead of the machine
+  // ==================================================================
+
+  private openGuide(): void {
+    this.guideOpenedHere = true;
+    location.hash = guideHash(this.language);
+  }
+
+  private closeGuide(): void {
+    if (this.guideOpenedHere) {
+      // Back to the entry before the guide: the browser's back button then works as expected, too.
+      this.guideOpenedHere = false;
+      history.back();
+    } else {
+      history.pushState(null, '', location.pathname + location.search);
+      void this.syncGuide();
+    }
+  }
+
+  /** Shows or hides the guide according to the address (#anleitung, #anleitung/<section>). */
+  private async syncGuide(): Promise<void> {
+    const route = parseGuideHash(location.hash);
+    const open = this.guide?.element.isConnected ?? false;
+    if (route) {
+      if (!open) {
+        this.stopRun();
+        if (!this.guide) {
+          const { createGuideView } = await import('./guide/view');
+          // the address may have changed while loading, or the page was rebuilt (language)
+          if (!this.root.contains(this.footerEl) || !parseGuideHash(location.hash)) return;
+          this.guide ??= createGuideView(this.language, {
+            close: () => this.closeGuide(),
+            switchLanguage: () => this.switchLanguage(),
+          });
+        }
+        if (!this.guide.element.isConnected) {
+          this.appScrollY = window.scrollY;
+          this.root.insertBefore(this.guide.element, this.footerEl);
+          document.documentElement.classList.add('guide-open');
+          this.guide.focus();
+        }
+      }
+      this.guide!.showSection(parseGuideHash(location.hash)?.section ?? null);
+    } else if (open) {
+      this.guideOpenedHere = false;
+      this.guide!.element.remove();
+      document.documentElement.classList.remove('guide-open');
+      window.scrollTo(0, this.appScrollY);
+    }
   }
 
   // ==================================================================
@@ -999,6 +1070,11 @@ export class App {
   }
 
   private onKey(ev: KeyboardEvent): void {
+    // While the guide is open, the machine does not react to its shortcuts.
+    if (this.guide?.element.isConnected) {
+      if (ev.key === 'Escape' && !document.querySelector('.menu.open')) this.closeGuide();
+      return;
+    }
     if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && (ev.key === 's' || ev.key === 'o')) {
       ev.preventDefault(); // instead of the browser's "save page" / "open file"
       if (ev.key === 's') void this.saveProgram();

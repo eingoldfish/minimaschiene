@@ -127,6 +127,7 @@ Wie im Original darf in Marken auch der Unterstrich `_` vorkommen, auch am Anfan
 ## Bewusste Neuerungen gegenüber dem Original
 
 - **Zweisprachig (Deutsch/Englisch):** Die gesamte Oberfläche ist umschaltbar, auch Assemblermeldungen, Mikroschritt-Erklärungen, Befehlshilfe und Beispielprogramme. Die Befehlsnamen (Mnemonics) bleiben gleich, Programme laufen also in beiden Sprachen.
+- **Eingebaute Anleitung** (Optionen → Anleitung, Adresse `#anleitung` bzw. `#anleitung/<abschnitt>`): fasst das Benutzermanual zusammen, abgeglichen mit der Web-App und um ihre eigenen Funktionen ergänzt. Pseudocode und Minisprache fehlen, weil die Web-App keinen Compiler dafür hat. Die Befehlstabelle wird aus `src/core/isa.ts` erzeugt, alle Codebeispiele laufen in `tests/guide.test.ts`.
 - **Kopierknöpfe:** Programmtext und Speicher lassen sich kopieren. Beim Speicher wird nur bis zur letzten belegten Zelle kopiert, als Tabelle wie angezeigt; ein benutzter Stack kommt als eigener Block dazu.
 - **Beamer-Modus:** große Schrift und automatisch helle Farben.
 - **Befehlshilfe** (Tooltip im Editor) darf über den Rand des Editors hinausragen.

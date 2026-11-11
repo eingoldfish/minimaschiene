@@ -56,6 +56,7 @@ Jeder Befehl belegt **zwei Speicherzellen**: In der ersten steht, *was* getan wi
 ### Weitere Funktionen
 
 - **Optionen:** *Detailansicht* (Werte zusätzlich hex/binär), *Animationen* (Werte wandern sichtbar über die Busse), *Erweiterter Modus* (Stack und Unterprogramme).
+- **Anleitung** (Optionen → Anleitung): ausführliche Hilfe zu Bedienung, Assemblersprache, allen Befehlen und Flags, direkt verlinkbar unter `…/#anleitung` (einzelne Abschnitte z. B. `#anleitung/befehle`).
 - **Datei:** Programme als `.mia`-Datei öffnen und speichern (Strg/⌘+O, Strg/⌘+S).
 - **Link teilen:** erzeugt einen Link, in dem das Programm steckt. Es wird nichts auf einem Server gespeichert.
 - **Automatisches Speichern:** Dein letztes Programm ist beim nächsten Besuch wieder da.
