@@ -11,11 +11,11 @@ Gedacht ist das Ganze für den Informatikunterricht (z. B. Oberstufe, Thema „A
 ## Woher die Idee kommt
 
 Das Vorbild und die **Hauptquelle** ist die **Minimaschine von A. Wiedemann**: **https://schule.awiedemann.de/**
-Dort gibt es das Original-Programm (Java), das Handbuch und weiteres Unterrichtsmaterial. Wer die Maschine gründlich verstehen oder im Unterricht einsetzen will, sollte dort zuerst nachlesen.
+Dort gibt es das Original-Programm (Java), das Handbuch und weiteres Unterrichtsmaterial.
 
 Diese Web-Version ist eine **eigenständige, inoffizielle Nachbildung**: Sie verhält sich wie die Minimaschine 4.0 und versteht dieselben Programme, wurde aber komplett neu geschrieben, damit sie ohne Java direkt im Browser läuft. Sie ist kein Produkt von A. Wiedemann.
 
-Ehrlicher Hinweis: Das Projekt ist größtenteils **„gevibecoded“**, also mit Hilfe einer KI (Claude) programmiert. Das Verhalten wurde mit vielen Tests gegen das Original abgeglichen – trotzdem können Fehler drin sein. Im Zweifel gilt das Original.
+Das Projekt ist mit Hilfe von KI programmiert. Das Verhalten wurde mit vielen Tests gegen das Original abgeglichen – trotzdem können Fehler drin sein. Im Zweifel gilt das Original.
 
 ## Wie die Maschine aufgebaut ist
 
