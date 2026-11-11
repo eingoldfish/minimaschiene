@@ -12,6 +12,9 @@ import type { AddressingMode, HaltReason, Language } from '../core';
 const de = {
   langName: 'Deutsch',
   langSwitchTitle: 'Switch to English',
+  fullscreen: 'Vollbild (ganzes Browserfenster)',
+  exitFullscreen: 'Vollbild beenden',
+  fullscreenFailed: 'Der Browser hat den Vollbildmodus nicht erlaubt.',
   languageChanged: 'Sprache: Deutsch.',
 
   // ----- header -----
@@ -272,6 +275,9 @@ export type Dictionary = typeof de;
 const en: Dictionary = {
   langName: 'English',
   langSwitchTitle: 'Auf Deutsch umschalten',
+  fullscreen: 'Full screen (whole browser window)',
+  exitFullscreen: 'Exit full screen',
+  fullscreenFailed: 'The browser did not allow full screen.',
   languageChanged: 'Language: English.',
 
   appTitle: 'Minimaschine',

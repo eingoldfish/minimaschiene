@@ -54,3 +54,15 @@ export function restoreIcon(): SVGSVGElement {
   return fromMarkup(`<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
     stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>`);
 }
+
+/** Arrows pointing out to the corners – "fill the whole screen". */
+export function fullscreenIcon(): SVGSVGElement {
+  return fromMarkup(`<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>`);
+}
+
+/** Arrows pointing in from the corners – "leave full screen". */
+export function exitFullscreenIcon(): SVGSVGElement {
+  return fromMarkup(`<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>`);
+}

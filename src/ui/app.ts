@@ -15,7 +15,7 @@ import { decodeShare, encodeShare } from '../storage/share';
 import { defaultProgram, getExamples, isExampleSource } from './examples';
 import { defaultLanguage, keys, setLanguage, t } from './i18n';
 import { menu, menuHeading } from './menu';
-import { checkIcon, copyIcon, flagIcon, maximizeIcon, restoreIcon } from './icons';
+import { checkIcon, copyIcon, exitFullscreenIcon, flagIcon, fullscreenIcon, maximizeIcon, restoreIcon } from './icons';
 import { MachineView } from './machineView';
 import { MemoryView } from './memoryView';
 import { memoryAsTable, type MemoryFormat } from './memoryTable';
@@ -133,6 +133,7 @@ export class App {
   private readonly tabPanes: Record<'diagram' | 'registers', HTMLElement>;
   private readonly mainEl: HTMLElement;
   private readonly maxButtons: Record<'editor' | 'machine', HTMLButtonElement>;
+  private readonly fullscreenButton: HTMLButtonElement;
 
   constructor(private readonly root: HTMLElement, carry?: AppCarry) {
     this.applySavedSettings(loadSettings());
@@ -190,6 +191,11 @@ export class App {
       return sw;
     };
 
+    // Full screen for the whole page (wide screens only; hidden where the browser cannot do it)
+    this.fullscreenButton = h('button', { type: 'button', class: 'subtle icon-btn fullscreen-btn wide-only',
+      hidden: !document.fullscreenEnabled, onclick: () => this.toggleFullscreen() });
+    this.updateFullscreenButton();
+
     const header = h('header', { class: 'app-header' },
       h('div', { class: 'title-row' },
         h('h1', {}, d.appTitle),
@@ -209,7 +215,8 @@ export class App {
           button(d.beamer, () => this.toggleBeamer(), { class: 'subtle wide-only', title: d.beamerTitle }),
           themeSwitch('wide-only'),
           h('button', { type: 'button', class: 'subtle lang-btn', title: d.langSwitchTitle, 'aria-label': d.langSwitchTitle,
-            onclick: () => this.switchLanguage() }, flagIcon(this.language === 'de' ? 'en' : 'de')))),
+            onclick: () => this.switchLanguage() }, flagIcon(this.language === 'de' ? 'en' : 'de')),
+          this.fullscreenButton)),
       h('nav', { class: 'toolbar', 'aria-label': d.toolbarLabel },
         h('div', { class: 'btn-group' }, this.btn.stepBack, this.btn.step, this.btn.micro, this.btn.run, this.btn.reset),
         h('div', { class: 'run-settings' },
@@ -388,6 +395,7 @@ export class App {
     window.addEventListener('pagehide', () => this.autosaveNow(), { signal });
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.autosaveNow(); }, { signal });
     window.addEventListener('hashchange', () => void this.loadFromHash(), { signal });
+    document.addEventListener('fullscreenchange', () => this.updateFullscreenButton(), { signal });
     // A programming error must not leave the user puzzled: save the program and say so.
     const onError = () => {
       this.stopRun();
@@ -1031,6 +1039,22 @@ export class App {
     this.updateMaximized();
     if (this.maximized === 'editor') this.editor.focus();
     this.render();
+  }
+
+  /** Shows the whole page in full screen, or leaves full screen again. */
+  private toggleFullscreen(): void {
+    const request = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    request.catch(() => this.setStatus(t().fullscreenFailed, 'warning'));
+  }
+
+  private updateFullscreenButton(): void {
+    const d = t();
+    const on = document.fullscreenElement !== null;
+    const title = on ? d.exitFullscreen : d.fullscreen;
+    this.fullscreenButton.title = title;
+    this.fullscreenButton.setAttribute('aria-label', title);
+    this.fullscreenButton.setAttribute('aria-pressed', String(on));
+    this.fullscreenButton.replaceChildren(on ? exitFullscreenIcon() : fullscreenIcon());
   }
 
   private updateMaximized(): void {
