@@ -39,7 +39,7 @@ export function menu(label: string, options: MenuOptions, ...items: Child[]): Me
   toggle.addEventListener('click', () => setOpen(element, !element.classList.contains('open')));
   // A chosen action closes the menu; checkboxes keep it open for more changes.
   pop.addEventListener('click', (ev) => {
-    if ((ev.target as Element).closest('button')) setOpen(element, false);
+    if ((ev.target as Element).closest('button:not(.info-btn)')) setOpen(element, false);
   });
   // Choosing one option of a radio group is a single choice, too.
   pop.addEventListener('change', (ev) => {
@@ -51,6 +51,22 @@ export function menu(label: string, options: MenuOptions, ...items: Child[]): Me
 /** Heading inside a menu (not clickable). */
 export function menuHeading(text: string): HTMLElement {
   return h('div', { class: 'menu-heading' }, text);
+}
+
+/**
+ * A menu entry (e.g. a checkbox) with a small info button; the button shows
+ * or hides an explanation below the entry without closing the menu.
+ */
+export function menuItemWithInfo(item: HTMLElement, info: string, infoLabel: string): HTMLElement {
+  const note = h('p', { class: 'menu-info-text', hidden: true }, info);
+  const btn = h('button', {
+    type: 'button', class: 'info-btn', title: infoLabel, 'aria-label': infoLabel, 'aria-expanded': 'false',
+  }, 'i');
+  btn.addEventListener('click', () => {
+    note.hidden = !note.hidden;
+    btn.setAttribute('aria-expanded', String(!note.hidden));
+  });
+  return h('div', { class: 'menu-info-item' }, h('div', { class: 'menu-info-row' }, item, btn), note);
 }
 
 function setOpen(menuEl: Element, open: boolean): void {

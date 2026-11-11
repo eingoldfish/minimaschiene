@@ -1042,6 +1042,58 @@ button.theme-switch {
   padding: 0.3rem 0.6rem;
 }
 
+.menu-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0.4rem 0.3rem 0.6rem;
+}
+
+.menu-info-row > .check {
+  flex: 1;
+}
+
+button.info-btn {
+  flex: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: italic 600 0.75rem/1 Georgia, 'Times New Roman', serif;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+button.info-btn:hover,
+button.info-btn[aria-expanded='true'] {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.menu-info-text {
+  width: 16rem;
+  max-width: calc(100vw - 4rem);
+  box-sizing: border-box;
+  margin: 0 0.6rem 0.35rem;
+  padding: 0.4rem 0.55rem;
+  border-left: 3px solid var(--border);
+  background: var(--surface-2);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  white-space: normal;
+}
+
+.menu-info-text[hidden] {
+  display: none;
+}
+
 .menu.open > .menu-pop .segmented {
   flex-direction: column;
   border: none;

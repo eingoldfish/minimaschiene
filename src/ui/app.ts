@@ -14,7 +14,7 @@ import { openFile, saveFile, type SaveTarget } from '../storage/files';
 import { decodeShare, encodeShare } from '../storage/share';
 import { defaultProgram, getExamples, isExampleSource } from './examples';
 import { defaultLanguage, keys, setLanguage, t } from './i18n';
-import { menu, menuHeading } from './menu';
+import { menu, menuHeading, menuItemWithInfo } from './menu';
 import { bookIcon, checkIcon, copyIcon, exitFullscreenIcon, flagIcon, fullscreenIcon, maximizeIcon, restoreIcon } from './icons';
 import { MachineView } from './machineView';
 import { MemoryView } from './memoryView';
@@ -215,12 +215,12 @@ export class App {
         h('h1', {}, d.appTitle),
         h('div', { class: 'view-settings' },
           menu(d.options, { class: 'subtle', title: d.optionsTitle, align: 'right' },
-            h('label', { class: 'check', title: d.detailedTitle },
+            menuItemWithInfo(h('label', { class: 'check', title: d.detailedTitle },
               h('input', { type: 'checkbox', checked: this.detailed, onchange: (ev: Event) => { this.detailed = (ev.target as HTMLInputElement).checked; this.persistSettings(); this.render(); } }),
-              d.detailed),
-            h('label', { class: 'check', title: d.animationsTitle },
+              d.detailed), d.detailedInfo, d.infoAbout(d.detailed)),
+            menuItemWithInfo(h('label', { class: 'check', title: d.animationsTitle },
               h('input', { type: 'checkbox', checked: this.animations, onchange: (ev: Event) => { this.animations = (ev.target as HTMLInputElement).checked; this.persistSettings(); } }),
-              d.animations),
+              d.animations), d.animationsInfo(keys().microStep), d.infoAbout(d.animations)),
             h('label', { class: 'check', title: d.extendedTitle },
               h('input', { type: 'checkbox', checked: this.extended, class: 'extended-box', onchange: (ev: Event) => this.setExtended((ev.target as HTMLInputElement).checked) }),
               d.extended),
