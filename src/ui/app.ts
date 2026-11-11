@@ -16,7 +16,7 @@ import { defaultProgram, getExamples, isExampleSource, translateExample } from '
 import { defaultLanguage, keys, setLanguage, t } from './i18n';
 import { menu, menuItemWithInfo } from './menu';
 import { bookIcon, checkIcon, copyIcon, exitFullscreenIcon, flagIcon, fullscreenIcon, maximizeIcon, restoreIcon } from './icons';
-import { MachineView } from './machineView';
+import { machineAsText, MachineView, type MachineViewOptions } from './machineView';
 import { MemoryView } from './memoryView';
 import { memoryAsTable, type MemoryFormat } from './memoryTable';
 import { Session, type StopReason } from './session';
@@ -59,6 +59,8 @@ interface AppCarry {
   maximized: Maximized;
   /** The guide was opened with the button (closing it goes back in the history). */
   guideOpenedHere: boolean;
+  /** A status message was visible: the new one replaces it without animation (no jumping). */
+  statusShown: boolean;
 }
 
 /** Button with a visible keyboard shortcut. */
@@ -297,6 +299,7 @@ export class App {
               this.tabButtons[next].focus();
             },
           }, this.tabButtons.diagram, this.tabButtons.registers),
+          this.copyButton(d.copyMachineTitle, () => this.copyMachine()),
           this.maxButtons.machine)),
       this.tabPanes.diagram, this.tabPanes.registers);
 
@@ -429,7 +432,7 @@ export class App {
     this.updateFileName();
     this.setMachineTab(this.machineTab);
     if (carry) {
-      this.setStatus(d.languageChanged, 'info', true);
+      this.setStatus(d.languageChanged, 'info', true, !carry.statusShown);
       this.render();
       // after a language switch in the guide: open it again at the same place
       void this.syncGuide().then(() => { if (this.guide?.element.isConnected) window.scrollTo(0, carry.scrollY); });
@@ -463,6 +466,7 @@ export class App {
       machineTab: this.machineTab,
       maximized: this.maximized,
       guideOpenedHere: this.guideOpenedHere,
+      statusShown: !this.statusEl.hidden && !this.statusEl.classList.contains('status-leaving'),
     };
     window.clearTimeout(this.statusTimer);
     this.listeners.abort();
@@ -604,6 +608,25 @@ export class App {
     const text = this.editor.getText();
     const lines = text.replace(/\n+$/, '').split('\n').length;
     return this.copyText(text, t().codeCopied(text.trim() === '' ? 0 : lines));
+  }
+
+  /** What the register view shows (also used to copy the registers as text). */
+  private machineOptions(): MachineViewOptions {
+    const s = this.session;
+    const ir = s.state.ir;
+    return {
+      detailed: this.detailed,
+      format: this.format === 'opcodes' ? 'signed' : this.format,
+      currentLine: this.programStale ? undefined : s.currentLine,
+      hasExecuted: !(ir.opcode === 0 && ir.mode === 'none' && ir.address === 0 && !s.canStepBack),
+      labelAt: (a) => s.labelAt(a),
+      extended: this.extended,
+    };
+  }
+
+  /** Copies the registers as text, in the current language. */
+  private copyMachine(): Promise<boolean> {
+    return this.copyText(machineAsText(this.session.state, this.machineOptions()), t().machineCopied);
   }
 
   /** Copies the memory up to the last used cell, as displayed (format, hex addresses). */
@@ -1257,7 +1280,8 @@ export class App {
    *        steps …): they disappear after a few seconds. Errors, warnings and
    *        messages that tell what to do next stay until the next message.
    */
-  private setStatus(text: string, kind: StatusKind, transient = false): void {
+  /** @param animate false: show the message at once (e.g. in place of one that was visible before a rebuild) */
+  private setStatus(text: string, kind: StatusKind, transient = false, animate = true): void {
     window.clearTimeout(this.statusTimer);
     if (transient) this.statusTimer = window.setTimeout(() => this.setStatus('', 'info'), TRANSIENT_STATUS_MS);
     const el = this.statusEl;
@@ -1272,6 +1296,7 @@ export class App {
     el.textContent = text;
     el.className = `status status-${kind}`;
     el.hidden = false;
+    if (!animate) return;
     if (wasShown) this.animateStatusResize(oldHeight);
     else this.animateStatusIn();
   }
@@ -1348,18 +1373,9 @@ export class App {
   private render(): void {
     const s = this.session;
     const st = s.state;
-    const ir = st.ir;
-    const hasExecuted = !(ir.opcode === 0 && ir.mode === 'none' && ir.address === 0 && !s.canStepBack);
     const currentLine = this.programStale ? undefined : s.currentLine;
 
-    this.machine.update(st, {
-      detailed: this.detailed,
-      format: this.format === 'opcodes' ? 'signed' : this.format,
-      currentLine,
-      hasExecuted,
-      labelAt: (a) => s.labelAt(a),
-      extended: this.extended,
-    });
+    this.machine.update(st, this.machineOptions());
     this.diagram.update(st, this.lastEvent, { labelAt: (a) => s.labelAt(a) });
     this.renderExplanation();
     this.memory.update(st, {
