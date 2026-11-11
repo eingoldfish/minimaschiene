@@ -4,6 +4,7 @@
  * example are executed in tests/examples.test.ts.
  */
 import type { Language } from '../core';
+import { MORE_EXAMPLES, MORE_EXAMPLES_EN } from './moreExamples';
 
 export interface Example {
   id: string;
@@ -17,8 +18,8 @@ export interface Example {
   check: { label: string; expected: number };
 }
 
-/** German examples. */
-export const EXAMPLES: readonly Example[] = [
+/** German examples (see moreExamples.ts for further ones). */
+const BASE_EXAMPLES: readonly Example[] = [
   {
     id: 'multiplikation',
     title: 'Multiplikation',
@@ -180,7 +181,7 @@ ggT: WORD 0
   },
   {
     id: 'unterprogramm',
-    title: 'Unterprogramm (erweiterter Modus)',
+    title: 'Unterprogramm',
     description: 'Quadrat in einem Unterprogramm: Parameter über den Stack, JSR und RTS',
     extended: true,
     check: { label: 'Ergebnis', expected: 49 },
@@ -208,7 +209,7 @@ Ergebnis: WORD 0
 ];
 
 /** English examples (same ids, algorithms and results as the German ones). */
-export const EXAMPLES_EN: readonly Example[] = [
+const BASE_EXAMPLES_EN: readonly Example[] = [
   {
     id: 'multiplikation',
     title: 'Multiplication',
@@ -370,7 +371,7 @@ gcd: WORD 0
   },
   {
     id: 'unterprogramm',
-    title: 'Subroutine (extended mode)',
+    title: 'Subroutine',
     description: 'Square in a subroutine: parameter on the stack, JSR and RTS',
     extended: true,
     check: { label: 'result', expected: 49 },
@@ -397,6 +398,33 @@ result: WORD 0
   },
 ];
 
+/** Order in the examples pop-up: from the basics to the special features. */
+const EXAMPLE_ORDER = [
+  // basics
+  'erste-schritte', 'adressierung', 'verzweigung', 'division',
+  // loops
+  'multiplikation', 'summe', 'fakultaet', 'ggt', 'quersumme', 'primzahl',
+  // lists in memory
+  'maximum', 'fibonacci', 'sortieren',
+  // flags and bits
+  'flags', 'bits',
+  // stack (extended mode)
+  'stack', 'unterprogramm', 'rekursion',
+];
+
+function ordered(examples: readonly Example[]): readonly Example[] {
+  const rank = (e: Example): number => {
+    const i = EXAMPLE_ORDER.indexOf(e.id);
+    return i < 0 ? EXAMPLE_ORDER.length : i;
+  };
+  return [...examples].sort((a, b) => rank(a) - rank(b));
+}
+
+/** All German examples, in the order of the pop-up. */
+export const EXAMPLES: readonly Example[] = ordered([...BASE_EXAMPLES, ...MORE_EXAMPLES]);
+/** All English examples, in the order of the pop-up. */
+export const EXAMPLES_EN: readonly Example[] = ordered([...BASE_EXAMPLES_EN, ...MORE_EXAMPLES_EN]);
+
 const BY_LANGUAGE: Record<Language, readonly Example[]> = { de: EXAMPLES, en: EXAMPLES_EN };
 
 /** Examples in the given language. */
@@ -409,9 +437,21 @@ export function isExampleSource(text: string): boolean {
   return EXAMPLES.some((e) => e.source === text) || EXAMPLES_EN.some((e) => e.source === text);
 }
 
+/**
+ * If `text` is one of the examples unchanged in the other language,
+ * returns the same example in `lang`; otherwise null.
+ */
+export function translateExample(text: string, lang: Language): string | null {
+  const other = lang === 'de' ? EXAMPLES_EN : EXAMPLES;
+  const found = other.find((e) => e.source === text);
+  if (!found) return null;
+  return getExamples(lang).find((e) => e.id === found.id)?.source ?? null;
+}
+
 /** Program shown on the very first start. */
 export function defaultProgram(lang: Language): string {
-  return getExamples(lang)[0]!.source;
+  const examples = getExamples(lang);
+  return (examples.find((e) => e.id === 'multiplikation') ?? examples[0]!).source;
 }
 
 /** German default program (kept for tests). */

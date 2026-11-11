@@ -12,7 +12,7 @@ import { createEditor, type ProgramEditor } from './editor';
 import { loadFileName, loadSettings, loadSource, saveFileName, saveSettings, saveSource } from '../storage/autosave';
 import { openFile, saveFile, type SaveTarget } from '../storage/files';
 import { decodeShare, encodeShare } from '../storage/share';
-import { defaultProgram, getExamples, isExampleSource } from './examples';
+import { defaultProgram, getExamples, isExampleSource, translateExample } from './examples';
 import { defaultLanguage, keys, setLanguage, t } from './i18n';
 import { menu, menuItemWithInfo } from './menu';
 import { bookIcon, checkIcon, copyIcon, exitFullscreenIcon, flagIcon, fullscreenIcon, maximizeIcon, restoreIcon } from './icons';
@@ -445,12 +445,14 @@ export class App {
     this.stopRun();
     this.leaveMicroView();
     this.autosaveNow();
+    const oldText = this.editor.getText();
     this.language = this.language === 'de' ? 'en' : 'de';
     this.persistSettings();
+    const { text, breakpoints } = this.translateUnchangedExample(oldText);
     const carry: AppCarry = {
       session: this.session,
-      text: this.editor.getText(),
-      breakpoints: this.editor.getBreakpointLines(),
+      text,
+      breakpoints,
       fileName: this.fileName,
       saveTarget: this.saveTarget,
       savedText: this.savedText,
@@ -465,6 +467,43 @@ export class App {
     this.listeners.abort();
     this.editor.destroy();
     new App(this.root, carry);
+  }
+
+  /**
+   * Language switch: an example that has not been changed is shown in the new
+   * language, too. Both versions give the same machine code, so a program that
+   * was already assembled (or is running) just keeps going; only labels, line
+   * numbers and breakpoints move to the new text.
+   */
+  private translateUnchangedExample(oldText: string): { text: string; breakpoints: number[] } {
+    const breakpoints = this.editor.getBreakpointLines();
+    const text = translateExample(oldText, this.language);
+    if (text === null) return { text: oldText, breakpoints };
+
+    const before = assembleSource(oldText, { extended: this.extended, lang: this.language });
+    const after = assembleSource(text, { extended: this.extended, lang: this.language });
+    const sameCode = before.ok && after.ok && after.memory.length === before.memory.length
+      && after.memory.every((v, i) => v === before.memory[i]);
+
+    // Breakpoints: line → address of the instruction there (or the next one below) → line in the new text.
+    let newBreakpoints: number[] = [];
+    if (sameCode) {
+      const instructionLines = [...before.lineToAddress.keys()].sort((a, b) => a - b);
+      newBreakpoints = breakpoints
+        .map((line) => instructionLines.find((l) => l >= line))
+        .map((line) => (line === undefined ? undefined : after.addressToLine.get(before.lineToAddress.get(line)!)))
+        .filter((line): line is number => line !== undefined);
+    }
+
+    // The machine keeps running with the same code; only labels and line numbers change.
+    const s = this.session;
+    if (s.program && !this.programStale) {
+      if (sameCode) s.replaceProgramInfo(after);
+      else this.programStale = true;
+    }
+    if (this.savedText === oldText) this.savedText = text;
+    saveSource(text);
+    return { text, breakpoints: [...new Set(newBreakpoints)] };
   }
 
   // ==================================================================
@@ -624,9 +663,7 @@ export class App {
             onclick: () => { close(); this.loadExample(e.id); },
           },
           h('span', { class: 'example-title' }, e.title,
-            // badge only if the title does not say it already
-            e.extended && !e.title.toLowerCase().includes(d.examplesExtended.toLowerCase())
-              ? h('span', { class: 'example-badge' }, d.examplesExtended) : null),
+            e.extended ? h('span', { class: 'example-badge' }, d.examplesExtended) : null),
           h('span', { class: 'example-desc' }, e.description))))));
     // A click on the dimmed background (outside the window) closes it, too.
     dialog.addEventListener('click', (ev) => { if (ev.target === dialog) close(); });

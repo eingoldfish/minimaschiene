@@ -69,6 +69,16 @@ export class Session {
     return result;
   }
 
+  /**
+   * Replaces the program information (labels, line numbers) by `result`
+   * without touching the machine – for a source that gives the same machine
+   * code (e.g. the same example in another language).
+   */
+  replaceProgramInfo(result: AssembleResult): void {
+    this.program = result;
+    this.updateBreakpointAddresses();
+  }
+
   /** Executes one instruction (undoable). */
   step(): HaltReason {
     if (this.state.halted !== 'none') return this.state.halted;
