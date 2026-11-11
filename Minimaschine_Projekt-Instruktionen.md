@@ -78,7 +78,7 @@ Mnemonics sind in Groß- und Kleinschreibung erlaubt.
   `JMPP`/`JGT` (>0: weder N noch Z), `JMPNN`/`JGE` (≥0: N nicht gesetzt), `JMPN`/`JLT` (<0: N), `JMPNP`/`JLE` (≤0: N oder Z), `JMPZ`/`JEQ` (Z), `JMPNZ`/`JNE` (nicht Z), `JMPV`/`JOV` (V), `JMPC`/`JOC` (C), `JMP` (unbedingt)
 - **Sprünge (vorzeichenlos):** `JHI` (weder C noch Z), `JHS` (C nicht gesetzt), `JLO` (C gesetzt), `JLS` (C oder Z)
 - **Sonstige (ohne Adresse):** `HALT` = `HOLD`, `RESET`, `NOOP`, `LOADC` (Akku ← Carry-Flag als 1/0)
-- **Erweiterter Modus (Stack):** `JSR adr`/`CALL` (SP−1, Folge-PC auf Stack, springen), `RTS`/`RETURN` (Rücksprung, SP+1), `PUSH`, `POP`, `RSV n` (SP−n), `REL n` (SP+n)
+- **Erweiterter Modus (Stack):** `JSR adr`/`CALL` (SP−1, Folge-PC auf Stack, springen), `RTS`/`RETURN` (Rücksprung, SP+1), `PUSH`, `POP`, `RSV $n` (SP−n), `REL $n` (SP+n)
 - **Pseudobefehl:** `WORD zahl|marke` – belegt eine Speicherzelle (negative Werte möglich)
 
 ### 5.4 Assemblersyntax

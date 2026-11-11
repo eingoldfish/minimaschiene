@@ -9,8 +9,8 @@
  *   word 1 = modeCode * 256 + opcode   (high byte = addressing mode, low byte = opcode)
  *   word 2 = address part (0 for instructions without address)
  *
- * Status (M5): standard and extended instruction set, codes measured on the
- * original. Only RSV and REL have own codes (they do not exist in the original).
+ * Status: standard and extended instruction set, all codes as in the original
+ * (measured, RSV/REL taken from the Java source).
  */
 
 import type { Texts } from './lang';
@@ -132,8 +132,8 @@ export const INSTRUCTIONS: readonly InstructionDef[] = [
     description: { de: 'Tut nichts.', en: 'Does nothing.' }, flags: FLAGS_NONE },
   { mnemonic: 'RESET', aliases: [], opcode: 1, modes: NONE, group: 'control',
     description: {
-      de: 'Setzt Akku, Programmzähler und Flags auf 0 und hält die Maschine an. Der Speicher bleibt erhalten.',
-      en: 'Sets accumulator, program counter and flags to 0 and halts the machine. The memory is kept.',
+      de: 'Setzt Akku, Programmzähler und Flags auf 0, löscht den ganzen Speicher (auch das Programm) und hält die Maschine an.',
+      en: 'Sets accumulator, program counter and flags to 0, clears the whole memory (the program, too) and halts the machine.',
     },
     flags: { de: 'alle gelöscht', en: 'all cleared' } },
   { mnemonic: 'HALT', aliases: ['HOLD'], opcode: 99, modes: NONE, group: 'control',
@@ -263,7 +263,7 @@ export const INSTRUCTIONS: readonly InstructionDef[] = [
 
   // ----- extended mode: stack -----
   // JSR, RTS, PUSH, POP: measured on the original (test 3b).
-  // RSV, REL: do not exist in the original (point 22) -> own free codes 27 and 28.
+  // RSV, REL: codes 7 and 8 and only "$n" (immediate) as in the original (Java source, docs/abgleich-java.md #12).
   { mnemonic: 'JSR', aliases: ['CALL'], opcode: 5, modes: JUMP, group: 'jump', extendedOnly: true,
     description: {
       de: 'Unterprogramm aufrufen: SP − 1, die Rücksprungadresse (Adresse des nächsten Befehls) kommt auf den Stack, dann Sprung zur angegebenen Adresse.',
@@ -288,14 +288,17 @@ export const INSTRUCTIONS: readonly InstructionDef[] = [
       en: 'Takes the top value from the stack into the accumulator: memory[SP] → accumulator, then SP + 1.',
     },
     flags: FLAGS_ZN },
-  { mnemonic: 'RSV', aliases: [], opcode: 27, modes: NUMBER, immediateMnemonic: 'RSV', group: 'stack', extendedOnly: true,
+  { mnemonic: 'RSV', aliases: [], opcode: 7, modes: NUMBER, group: 'stack', extendedOnly: true,
     description: {
-      de: 'Reserviert Platz auf dem Stack: SP − Zahl (z. B. für lokale Variablen).',
-      en: 'Reserves space on the stack: SP − number (e.g. for local variables).',
+      de: 'Reserviert Platz auf dem Stack: SP − Zahl (z. B. für lokale Variablen). Die Zahl steht mit ‚$‘: RSV $3.',
+      en: 'Reserves space on the stack: SP − number (e.g. for local variables). The number is written with ‘$’: RSV $3.',
     },
     flags: FLAGS_NONE },
-  { mnemonic: 'REL', aliases: [], opcode: 28, modes: NUMBER, immediateMnemonic: 'REL', group: 'stack', extendedOnly: true,
-    description: { de: 'Gibt Platz auf dem Stack wieder frei: SP + Zahl.', en: 'Releases space on the stack: SP + number.' },
+  { mnemonic: 'REL', aliases: [], opcode: 8, modes: NUMBER, group: 'stack', extendedOnly: true,
+    description: {
+      de: 'Gibt Platz auf dem Stack wieder frei: SP + Zahl. Die Zahl steht mit ‚$‘: REL $3.',
+      en: 'Releases space on the stack: SP + number. The number is written with ‘$’: REL $3.',
+    },
     flags: FLAGS_NONE },
 ];
 

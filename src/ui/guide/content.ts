@@ -45,8 +45,6 @@ const SP_MODES: readonly AddressingMode[] = ['offset', 'offsetIndirect', 'immedi
 
 /** The possible address parts of an instruction, e.g. "adr · $zahl · (adr) · n(SP)ᴱ …". */
 function addressForms(def: InstructionDef, lang: Language): string {
-  // RSV/REL: the number is written without "$" (RSV 3).
-  if (def.immediateMnemonic === def.mnemonic) return `<code>${lang === 'de' ? 'zahl' : 'num'}</code>`;
   const parts = def.modes.filter((m): m is Exclude<AddressingMode, 'none'> => m !== 'none').map((mode) =>
     `<code>${escapeHtml(MODE_SYNTAX[mode][lang])}</code>${SP_MODES.includes(mode) && !def.extendedOnly ? '<sup>E</sup>' : ''}`);
   return parts.length ? parts.join(' · ') : (lang === 'de' ? '<span class="g-muted">keiner</span>' : '<span class="g-muted">none</span>');

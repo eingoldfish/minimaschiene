@@ -1,7 +1,7 @@
 /* =====================================================================
    Minimaschine Web – styles
-   All sizes in rem, so the "Beamer" mode only has to change the root
-   font size. All colours are CSS variables (light/dark mode).
+   All sizes in rem (relative to the root font size).
+   All colours are CSS variables (light/dark mode).
    ===================================================================== */
 
 /* ---------- Colour tokens (light) ----------
@@ -143,11 +143,6 @@
   --token-bg: #f0f3f6;
   --token-text: #0b0e12;
   --alu-value: #e05cf0;
-}
-
-/* Beamer: everything bigger */
-:root.beamer {
-  font-size: 21px;
 }
 
 /* Hidden text field used as a fallback for copying to the clipboard */
@@ -1973,11 +1968,13 @@ input[type='number'],
   border-top: 1px dashed var(--border-strong);
 }
 
-.menu.open > .menu-pop > button.menu-guide::before {
-  content: '?';
-  order: 2;
-  font-family: var(--font-mono);
-  font-weight: 600;
+.menu.open > .menu-pop > button.menu-guide {
+  align-items: center;
+}
+
+.menu-guide .icon {
+  width: 1.1em;
+  height: 1.1em;
   color: var(--accent-strong);
 }
 

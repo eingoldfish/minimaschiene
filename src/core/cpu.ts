@@ -85,6 +85,8 @@ export interface UndoRecord {
   registers: CpuRegisters;
   /** [address, old value] in the order they were written. */
   writes: Array<[number, number]>;
+  /** The whole memory before the step – only set when the step cleared it (instruction RESET). */
+  memory?: Uint16Array;
 }
 
 /** Result of run(). 'limit' means the step limit was reached (endless loop?). */
@@ -131,8 +133,8 @@ function copyRegisters(s: CpuRegisters): CpuRegisters {
 
 export class Cpu {
   private state: CpuState = createInitialState();
-  /** While a step is recorded for undo, memory writes are logged here. */
-  private writeLog: Array<[number, number]> | null = null;
+  /** While a step is recorded for undo, memory writes (and a cleared memory) are logged here. */
+  private undoLog: UndoRecord | null = null;
   /** Language of the micro step explanations (does not influence the execution). */
   language: Language = 'de';
   /**
@@ -141,7 +143,10 @@ export class Cpu {
    */
   extended = false;
   /** Memory access for micro steps (logs writes for undo). */
-  private readonly env: MicroEnv = { write: (address, value) => this.write(address, value) };
+  private readonly env: MicroEnv = {
+    write: (address, value) => this.write(address, value),
+    clearMemory: () => this.clearMemoryByInstruction(),
+  };
 
   /** Read-only view of the current state (UI must not mutate it). */
   getState(): Readonly<CpuState> {
@@ -267,6 +272,7 @@ export class Cpu {
 
   /** Reverts a step recorded with stepUndoable()/microStepUndoable(). Apply newest first. */
   undo(record: UndoRecord): void {
+    if (record.memory) this.state.memory = record.memory;
     for (let i = record.writes.length - 1; i >= 0; i--) {
       const [address, oldValue] = record.writes[i]!;
       this.state.memory[address] = oldValue;
@@ -306,11 +312,11 @@ export class Cpu {
 
   private recordUndo<T>(action: () => T): { result: T; undo: UndoRecord } {
     const undo: UndoRecord = { registers: copyRegisters(this.state), writes: [] };
-    this.writeLog = undo.writes;
+    this.undoLog = undo;
     try {
       return { result: action(), undo };
     } finally {
-      this.writeLog = null;
+      this.undoLog = null;
     }
   }
 
@@ -322,9 +328,20 @@ export class Cpu {
   /** Writes memory as part of an instruction (logged for undo). */
   private write(address: number, value: number): void {
     const addr = address & WORD_MASK;
-    this.writeLog?.push([addr, this.state.memory[addr] ?? 0]);
+    this.undoLog?.writes.push([addr, this.state.memory[addr] ?? 0]);
     this.state.memory[addr] = value;
     this.state.lastWrite = addr;
+  }
+
+  /**
+   * Instruction RESET clears the memory like "Speicher löschen" (as in the
+   * original). For "step back" the old memory is kept in the undo record;
+   * it is replaced by a new array, so the old one stays unchanged.
+   */
+  private clearMemoryByInstruction(): void {
+    if (this.undoLog && !this.undoLog.memory) this.undoLog.memory = this.state.memory;
+    this.state.memory = createClearedMemory();
+    this.state.lastWrite = null;
   }
 
   /** Value of the operand for the given addressing mode. */
@@ -422,9 +439,10 @@ export class Cpu {
         s.halted = 'halt';
         return;
       case 'RESET':
-        // Own decision (docs/kompatibilitaet.md, point 7): like the reset
-        // button, but the machine halts. Memory is kept.
+        // As in the original (docs/kompatibilitaet.md, point 7): like the reset
+        // button, and the memory is cleared (program included); the machine halts.
         this.reset();
+        this.clearMemoryByInstruction();
         s.halted = 'reset';
         return;
 

@@ -21,7 +21,7 @@ Legende: **A** = Web-App lehnt ab, was das Original annimmt (oder umgekehrt) · 
 | 9 | `LOAD -1(SP)`, `LOAD @-1(SP)` | Fehler; Minus nur bei `$-1(SP)` | erlaubt | A |
 | 10 | Marke als SP-Offset (`LOAD x(SP)`) | Fehler | erlaubt | A |
 | 11 | `LOAD (SP)`, `LOAD @(SP)` | erlaubt als `0(SP)` bzw. `@0(SP)` | Fehler | A |
-| 12 | `RSV $3` / `REL $3` | erlaubt, Opcodes **7/8**, nur mit `$` | `RSV $3` Fehler, `RSV 3` erlaubt, Opcodes 27/28 | A, teilweise ✅ |
+| 12 | `RSV $3` / `REL $3` | erlaubt, Opcodes **7/8**, nur mit `$` | **angeglichen**: `RSV $3`, Opcodes 7/8; `RSV 3` Fehler | – |
 | 13 | `RSV $3` ohne erweiterten Modus | wird assembliert, CPU meldet dann „Illegaler Befehlscode“ | Fehler beim Assemblieren | A |
 | 14 | `a$b:` (Dollar in Marke) / `LOAD$5` | Marke erlaubt / ein Bezeichner, Fehler | Fehler / als `LOAD $5` gelesen | A (Randfall) |
 | 15 | geschütztes Leerzeichen, Seitenvorschub | unerlaubtes Zeichen | als Leerraum akzeptiert | A (Randfall) |
@@ -35,7 +35,7 @@ Legende: **A** = Web-App lehnt ab, was das Original annimmt (oder umgekehrt) · 
 
 | # | Thema | Original | Web-App | Art |
 |---|---|---|---|---|
-| 19 | Zellen 65534 und 65535 nach Start, „Speicher löschen“, Assemblieren und Befehl `RESET` | **−1 (0xFFFF)** | **angeglichen** (außer Befehl `RESET`, der bei uns den Speicher behält ✅) | – |
+| 19 | Zellen 65534 und 65535 nach Start, „Speicher löschen“, Assemblieren und Befehl `RESET` | **−1 (0xFFFF)** | **angeglichen** (auch Befehl `RESET`) | – |
 | 20 | PC nach illegalem Befehlscode | hinter dem Befehl (+2) | **angeglichen** | – |
 | 21 | Befehle ohne Adresse (`NOOP`, `RESET`, `LOADC`, `NOT`, `HALT`, `RTS`, `PUSH`, `POP`) mit Adressteil ≠ 0 | illegal | **angeglichen** | – |
 | 22 | Sprünge mit Art 3 (indirekt), `JSR` mit Art 3–6 | werden ausgeführt | **angeglichen** für Art 3; Art 4–6 weiter illegal | E (Rest) |
@@ -47,7 +47,7 @@ Legende: **A** = Web-App lehnt ab, was das Original annimmt (oder umgekehrt) · 
 | 28 | Nach Ende eines Laufs (HALT, illegal, Zeitschranke) | Ausführen/Schritt gesperrt bis Zurücksetzen oder Assemblieren | **angeglichen** („Schritt zurück“ bleibt möglich ✅) | – |
 | 29 | SP-Arithmetik | interner Tippfehler (−32268 statt −32768), wirkt praktisch nie | sauber modulo 65536 | nicht nachbauen |
 
-**Übereinstimmung:** alle Opcodes außer RSV/REL, Ergebnisse und Flags von ADD, SUB, CMP, DIV, MOD, DIVU, MODU, MULH, LOAD, LOADC, AND, OR, XOR, NOT, SHL/SHR/SHRA (Schiebeweite mod 32, C bei SHL), alle 13 Sprungbedingungen, Flags bei STORE/Sprüngen unverändert, Adressierungsarten 1–5, PC-Überlauf, PC nach `HALT` (+2), `PUSH`/`POP`/`JSR`/`RTS`-Reihenfolge und -Flags, SP-Start 65534, Zurücksetzen behält den Speicher, Zeitschranke 5 s.
+**Übereinstimmung:** alle Opcodes (auch RSV/REL), Ergebnisse und Flags von ADD, SUB, CMP, DIV, MOD, DIVU, MODU, MULH, LOAD, LOADC, AND, OR, XOR, NOT, SHL/SHR/SHRA (Schiebeweite mod 32, C bei SHL), alle 13 Sprungbedingungen, Flags bei STORE/Sprüngen unverändert, Adressierungsarten 1–5, PC-Überlauf, PC nach `HALT` (+2), `PUSH`/`POP`/`JSR`/`RTS`-Reihenfolge und -Flags, SP-Start 65534, Zurücksetzen behält den Speicher, Zeitschranke 5 s.
 
 ## 3. Mikroschritte (Punkt 8, eigene didaktische Entscheidung)
 
@@ -87,7 +87,7 @@ Weitere Unterschiede:
 
 | Punkt | Bisher | Laut Java-Code |
 |---|---|---|
-| 1 / 22 | RSV/REL gibt es im Original nicht | Es gibt sie: Opcodes 7/8, Schreibweise `RSV $3`. Im Test wurde `RSV 3` ohne `$` probiert. |
+| 1 / 22 | RSV/REL gibt es im Original nicht | Es gibt sie: Opcodes 7/8, Schreibweise `RSV $3`. Im Test wurde `RSV 3` ohne `$` probiert. – **übernommen** |
 | 9 | `.mia` (Annahme) | bestätigt |
 | 12 | PC bleibt auf illegalem Befehl | PC steht dahinter (+2); andere Regeln, was illegal ist (Nr. 21–24) – **übernommen** (außer Nr. 22/23) |
 | 13 | PC nach HALT = +2 (Annahme) | bestätigt |

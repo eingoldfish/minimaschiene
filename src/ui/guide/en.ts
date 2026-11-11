@@ -150,8 +150,6 @@ the status line.</p>
     <strong>Animations</strong> lets values visibly travel over the buses during micro steps.
     <strong>Extended mode</strong> switches on the stack pointer and the stack instructions.
     <strong>Guide</strong> opens this page. On phones, the dark mode switch is here as well.</dd>
-  <dt>Projector</dt>
-  <dd>Large text and light colours for projecting in the classroom. Click again to switch back.</dd>
   <dt>Light/dark</dt>
   <dd>Changes the colour scheme. Without your own choice the app follows the system setting.</dd>
   <dt>Flag</dt>
@@ -242,7 +240,9 @@ equal again.</p>`,
 <ul>
   <li><strong><code>HALT</code></strong> (or <code>HOLD</code>): the program is finished. Afterwards the PC points behind
     the <code>HALT</code> instruction; the editor keeps the <code>HALT</code> line highlighted.</li>
-  <li><strong><code>RESET</code></strong> in the program: accumulator, PC and flags become 0, the machine stops.</li>
+  <li><strong><code>RESET</code></strong> in the program: accumulator, PC and flags become 0, the <strong>whole memory is
+    cleared</strong> (the program, too), the machine stops. To run it again you have to assemble again – or go back with
+    “Step back”, which brings the memory back as well.</li>
   <li><strong>Invalid instruction:</strong> there is no valid instruction code at the address – usually because a
     <code>HALT</code> is missing and the program runs into the data.</li>
   <li><strong>Division by 0</strong> with <code>DIV</code>, <code>MOD</code>, <code>DIVU</code>, <code>MODU</code> (and the
@@ -265,6 +265,7 @@ After changing a memory cell by hand, you can only go back again after the next 
     <tr><th scope="row">Reset</th><td>to 0 (SP to 65534)</td><td>kept</td></tr>
     <tr><th scope="row">Clear memory</th><td>kept</td><td>all 0 (65534/65535 = −1)</td></tr>
     <tr><th scope="row">Assemble</th><td>to 0</td><td>cleared, then program from address 0</td></tr>
+    <tr><th scope="row">Instruction <code>RESET</code> in the program</th><td>to 0, machine stops</td><td>all 0 (65534/65535 = −1) – the program, too</td></tr>
     <tr><th scope="row">… and keep memory</th><td>to 0</td><td>kept, only the program cells are overwritten</td></tr>
     <tr><th scope="row">Switch extended mode</th><td>to 0</td><td>kept (assemble again afterwards)</td></tr>
   </tbody>
@@ -486,7 +487,8 @@ extended mode the assembler reports stack instructions as errors.</p>
   <li><code>PUSH</code>: first SP − 1, then accumulator → memory[SP]. <code>POP</code>: first memory[SP] → accumulator, then SP + 1.</li>
   <li><code>JSR adr</code> (also <code>CALL</code>): SP − 1, the return address (address of the next instruction) goes on
     the stack, then jump to adr. <code>RTS</code> (also <code>RETURN</code>): address from the stack into the PC, then SP + 1.</li>
-  <li><code>RSV n</code> reserves n cells (SP − n), e.g. for local variables; <code>REL n</code> releases them (SP + n).</li>
+  <li><code>RSV $n</code> reserves n cells (SP − n), e.g. for local variables; <code>REL $n</code> releases them (SP + n).
+    As in the original the number is written with <code>$</code>; <code>RSV 3</code> without <code>$</code> is an error.</li>
   <li><code>n(SP)</code> accesses values on the stack: <code>0(SP)</code> is the top element, <code>1(SP)</code> the one
     below it, and so on.</li>
 </ul>
@@ -602,12 +604,9 @@ instructions have been checked against the original. The differences are mainly 
 </ul>
 <h3>Different behaviour</h3>
 <ul>
-  <li><strong><code>RESET</code> instruction:</strong> in the original it also clears the memory; here the program is kept.</li>
   <li><strong>Division by 0:</strong> the machine stops at the instruction with a message (original: reset or continue).</li>
   <li><strong>Time limit:</strong> only applies at maximum speed.</li>
   <li><strong>Editing memory</strong> always works, without a separate edit mode.</li>
-  <li><strong><code>RSV</code>/<code>REL</code></strong> are written <code>RSV 3</code> here (original: <code>RSV $3</code>)
-    and have different opcodes – programs using them cannot be exchanged.</li>
   <li><strong>Stricter assembler:</strong> numbers outside 16 bits, <code>+5</code> or unsuitable addressing modes
     (e.g. <code>NOOP 5</code>) are errors when assembling instead of only when running. Mixed case such as
     <code>Load</code>, on the other hand, is allowed.</li>

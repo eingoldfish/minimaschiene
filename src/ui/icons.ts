@@ -26,6 +26,13 @@ export function checkIcon(): SVGSVGElement {
     stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>`);
 }
 
+/** An open book – the guide. */
+export function bookIcon(): SVGSVGElement {
+  return fromMarkup(`<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/>
+    <path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg>`);
+}
+
 const FLAGS: Record<Language, string> = {
   de: `<svg class="flag-icon" viewBox="0 0 5 3"><rect width="5" height="1" y="0" fill="#000"/>
     <rect width="5" height="1" y="1" fill="#DD0000"/><rect width="5" height="1" y="2" fill="#FFCE00"/></svg>`,

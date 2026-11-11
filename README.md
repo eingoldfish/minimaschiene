@@ -60,7 +60,7 @@ Jeder Befehl belegt **zwei Speicherzellen**: In der ersten steht, *was* getan wi
 - **Datei:** Programme als `.mia`-Datei öffnen und speichern (Strg/⌘+O, Strg/⌘+S).
 - **Link teilen:** erzeugt einen Link, in dem das Programm steckt. Es wird nichts auf einem Server gespeichert.
 - **Automatisches Speichern:** Dein letztes Programm ist beim nächsten Besuch wieder da.
-- **Deutsch/Englisch** (Flaggen-Knopf), **Hell/Dunkel**, **Beamer-Modus** (große Schrift für die Projektion).
+- **Deutsch/Englisch** (Flaggen-Knopf), **Hell/Dunkel**, **Vollbild**.
 - **Kopieren:** Programmtext oder Speicherinhalt (als Tabelle, z. B. für eine Tabellenkalkulation).
 
 Auf dem Mac musst du für die F-Tasten eventuell zusätzlich `fn` drücken.
@@ -177,7 +177,7 @@ Mit `JMP (adr)` springt man zu der Adresse, die in der Zelle `adr` steht.
 |---|---|
 | `HALT` (`HOLD`) | hält die Maschine an |
 | `NOOP` | tut nichts |
-| `RESET` | setzt Akku, Befehlszähler und Flags auf 0 und hält an |
+| `RESET` | setzt Akku, Befehlszähler und Flags auf 0, löscht den ganzen Speicher (auch das Programm) und hält an |
 
 ### Stack und Unterprogramme (nur im erweiterten Modus)
 
@@ -187,8 +187,8 @@ Mit `JMP (adr)` springt man zu der Adresse, die in der Zelle `adr` steht.
 | `RTS` (`RETURN`) | Rücksprung aus dem Unterprogramm |
 | `PUSH` | legt den Akku auf den Stack |
 | `POP` | holt den obersten Stack-Wert in den Akku |
-| `RSV n` | reserviert n Zellen auf dem Stack (z. B. für lokale Variablen) |
-| `REL n` | gibt n Zellen auf dem Stack wieder frei |
+| `RSV $n` | reserviert n Zellen auf dem Stack (z. B. für lokale Variablen) |
+| `REL $n` | gibt n Zellen auf dem Stack wieder frei |
 
 ### Pseudobefehl
 

@@ -145,14 +145,39 @@ describe('control instructions', () => {
     expect(cpu.getState().a).toBe(1);
   });
 
-  it('RESET clears registers and halts, memory is kept (own decision)', () => {
+  it('RESET clears registers and the whole memory and halts (as in the original)', () => {
     const cpu = cpuWith([ins('LOADI', 7), ins('STORE', 30), ins('RESET')]);
     expect(cpu.run(100).reason).toBe('reset');
     const s = cpu.getState();
     expect(s.a).toBe(0);
     expect(s.pc).toBe(0);
-    expect(s.memory[30]).toBe(7);
-    expect(s.memory[0]).not.toBe(0); // program still there
+    expect(s.memory[30]).toBe(0);
+    expect(s.memory[0]).toBe(0); // the program is gone, too
+    expect([s.memory[65534], s.memory[65535]]).toEqual([0xffff, 0xffff]); // like "Speicher löschen"
+    expect(s.lastWrite).toBeNull();
+  });
+
+  it('step back after RESET brings the memory back (whole step and micro step)', () => {
+    for (const micro of [false, true]) {
+      const cpu = cpuWith([ins('LOADI', 7), ins('STORE', 30), ins('RESET')]);
+      cpu.run(2);
+      const before = cpu.snapshot();
+      const undos = [];
+      if (micro) {
+        do undos.push(cpu.microStepUndoable().undo); while (cpu.getState().micro);
+      } else {
+        undos.push(cpu.stepUndoable().undo);
+      }
+      expect(cpu.getState().halted).toBe('reset');
+      expect(cpu.getState().memory[30]).toBe(0);
+      for (const u of undos.reverse()) cpu.undo(u);
+      const after = cpu.getState();
+      expect([...after.memory]).toEqual([...before.memory]);
+      expect(after.memory[30]).toBe(7);
+      expect(after.lastWrite).toBe(30);
+      expect(after.pc).toBe(before.pc);
+      expect(after.halted).toBe('none');
+    }
   });
 
   it('reset() makes a halted CPU runnable again', () => {

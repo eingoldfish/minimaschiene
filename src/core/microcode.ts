@@ -102,6 +102,8 @@ export interface MicroContext {
 /** Environment passed to apply(): writing memory must go through the CPU (for undo). */
 export interface MicroEnv {
   write(address: number, value: number): void;
+  /** Clears the whole memory (instruction RESET). */
+  clearMemory(): void;
 }
 
 export interface PlannedMicroStep {
@@ -377,12 +379,12 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array, la
       HALT: [execTitle(tr('anhalten', 'halt')),
         tr('HALT: Die Maschine hält an. Das Programm ist zu Ende.', 'HALT: the machine halts. The program is finished.')],
       RESET: [execTitle(tr('zurücksetzen', 'reset')),
-        tr('RESET: Akku, Befehlszähler, Befehlsregister und Flags werden 0, der Stackpointer wird auf seinen Startwert gesetzt, die Maschine hält an. Der Speicher bleibt erhalten.',
-          'RESET: accumulator, program counter, instruction register and flags become 0, the stack pointer is set to its start value, the machine halts. The memory is kept.')],
+        tr('RESET: Akku, Befehlszähler, Befehlsregister und Flags werden 0, der Stackpointer wird auf seinen Startwert gesetzt und der ganze Speicher wird gelöscht – auch das Programm. Die Maschine hält an.',
+          'RESET: accumulator, program counter, instruction register and flags become 0, the stack pointer is set to its start value and the whole memory is cleared – the program, too. The machine halts.')],
     }[name];
     steps.push({
       event: { phase: 'execute', title: info[0]!, explanation: info[1]!, bus: {}, flows: [], active: ['decoder'] },
-      apply(s) {
+      apply(s, env) {
         if (name === 'HALT') {
           s.halted = 'halt';
         } else if (name === 'RESET') {
@@ -390,7 +392,8 @@ export function planInstruction(start: InstructionStart, memory: Uint16Array, la
           s.pc = 0;
           s.flags = { z: false, n: false, v: false, c: false };
           s.ir = { opcode: 0, mode: 'none', address: 0 };
-          s.sp = SP_START; // the last written cell stays marked, as with the reset button
+          s.sp = SP_START;
+          env.clearMemory(); // as in the original
           s.halted = 'reset';
         }
       },

@@ -15,7 +15,7 @@ import { decodeShare, encodeShare } from '../storage/share';
 import { defaultProgram, getExamples, isExampleSource } from './examples';
 import { defaultLanguage, keys, setLanguage, t } from './i18n';
 import { menu, menuHeading } from './menu';
-import { checkIcon, copyIcon, exitFullscreenIcon, flagIcon, fullscreenIcon, maximizeIcon, restoreIcon } from './icons';
+import { bookIcon, checkIcon, copyIcon, exitFullscreenIcon, flagIcon, fullscreenIcon, maximizeIcon, restoreIcon } from './icons';
 import { MachineView } from './machineView';
 import { MemoryView } from './memoryView';
 import { memoryAsTable, type MemoryFormat } from './memoryTable';
@@ -98,9 +98,6 @@ export class App {
   private extended = false;
   /** Set when the time limit stopped a run: like the original, Run/Step stay blocked until reset or assemble. */
   private timedOut = false;
-  private beamer = false;
-  /** Theme before the projector mode switched to light (restored afterwards). */
-  private themeBeforeBeamer: Theme | null = null;
   private language: Language = defaultLanguage();
   private maximized: Maximized = 'none';
   /** Width of the program panel in percent of the area next to the machine (wide screens). */
@@ -127,6 +124,8 @@ export class App {
   // ----- run state -----
   /** The source was edited after the last successful assembling. */
   private programStale = false;
+  /** programStale was only set because the instruction RESET cleared the memory ("step back" undoes it). */
+  private staleByReset = false;
   private running = false;
   private runStart = 0;
   private lastFrame = 0;
@@ -227,8 +226,8 @@ export class App {
               d.extended),
             // phones: the colour scheme is in this menu, on wider screens it has its own button
             themeSwitch('phone-only', d.darkMode),
-            button(d.guide, () => this.openGuide(), { class: 'menu-guide', title: d.guideTitle })).element,
-          button(d.beamer, () => this.toggleBeamer(), { class: 'subtle wide-only', title: d.beamerTitle }),
+            h('button', { type: 'button', class: 'menu-guide', title: d.guideTitle, onclick: () => this.openGuide() },
+              d.guide, bookIcon())).element,
           themeSwitch('wide-only'),
           h('button', { type: 'button', class: 'subtle lang-btn', title: d.langSwitchTitle, 'aria-label': d.langSwitchTitle,
             onclick: () => this.switchLanguage() }, flagIcon(this.language === 'de' ? 'en' : 'de')),
@@ -424,7 +423,6 @@ export class App {
     window.matchMedia(DARK_QUERY).addEventListener('change', () => this.applyTheme(), { signal });
 
     this.applyTheme();
-    document.documentElement.classList.toggle('beamer', this.beamer);
     this.diagram.setExtended(this.extended);
     this.spButton.hidden = !this.extended;
     this.updateFileName();
@@ -694,7 +692,6 @@ export class App {
     this.extended = bool('extended', this.extended);
     this.hexAddresses = bool('hexAddresses', this.hexAddresses);
     this.followPc = bool('followPc', this.followPc);
-    this.beamer = bool('beamer', this.beamer);
     const speed = saved['speedIndex'];
     if (typeof speed === 'number' && SPEEDS[speed]) this.speedIndex = speed;
     const limit = saved['limitSeconds'];
@@ -703,8 +700,9 @@ export class App {
     if (theme === 'auto' || theme === 'light' || theme === 'dark') this.theme = theme;
     const format = saved['format'];
     if (format === 'signed' || format === 'unsigned' || format === 'hex' || format === 'opcodes') this.format = format;
+    // The projector mode was removed. It had switched to the light theme; give back the theme chosen before it.
     const before = saved['themeBeforeBeamer'];
-    if (before === 'auto' || before === 'light' || before === 'dark') this.themeBeforeBeamer = before;
+    if (saved['beamer'] === true && (before === 'auto' || before === 'light' || before === 'dark')) this.theme = before;
     const split = saved['splitPercent'];
     if (typeof split === 'number' && split >= 20 && split <= 80) this.splitPercent = split;
     const language = saved['language'];
@@ -718,12 +716,10 @@ export class App {
       extended: this.extended,
       hexAddresses: this.hexAddresses,
       followPc: this.followPc,
-      beamer: this.beamer,
       speedIndex: this.speedIndex,
       limitSeconds: this.limitSeconds,
       theme: this.theme,
       format: this.format,
-      themeBeforeBeamer: this.themeBeforeBeamer,
       language: this.language,
       splitPercent: this.splitPercent,
     });
@@ -749,6 +745,7 @@ export class App {
     this.showErrors(result.errors);
     if (result.ok) {
       this.programStale = false;
+      this.staleByReset = false;
       this.timedOut = false;
       if (result.size === 0) {
         this.setStatus(t().emptyProgram, 'warning');
@@ -785,6 +782,10 @@ export class App {
     const wasMicro = this.session.state.micro !== null;
     if (this.session.stepBack()) {
       this.timedOut = false;
+      if (this.staleByReset && this.session.state.halted !== 'reset') {
+        this.programStale = false; // the memory with the program is back
+        this.staleByReset = false;
+      }
       const nowMicro = this.session.state.micro !== null;
       this.setStatus(wasMicro || nowMicro ? t().backMicro : t().backStep, 'info', true);
     } else {
@@ -837,6 +838,7 @@ export class App {
     this.leaveMicroView();
     this.session.clearMemory();
     if (this.session.program) this.programStale = true;
+    this.staleByReset = false;
     this.setStatus(t().memoryCleared, 'info', true);
     this.render();
   }
@@ -927,7 +929,12 @@ export class App {
         this.setStatus(t().stopHalt, 'success');
         break;
       case 'reset':
-        this.setStatus(t().stopReset, 'info');
+        // As in the original, RESET has cleared the memory: the program is no longer there.
+        if (this.session.program && !this.programStale) {
+          this.programStale = true;
+          this.staleByReset = true;
+        }
+        this.setStatus(t().stopReset(keys().assemble), 'info');
         break;
       case 'illegalOpcode': {
         // As in the original, the PC already points behind the faulty instruction.
@@ -953,6 +960,7 @@ export class App {
   }
 
   private onSourceChanged(): void {
+    this.staleByReset = false;
     window.clearTimeout(this.autosaveTimer);
     this.autosaveTimer = window.setTimeout(() => saveSource(this.editor.getText()), 400);
     if (this.session.program && !this.programStale) {
@@ -982,6 +990,7 @@ export class App {
     // As in the original (desktop 4.0): switching resets the CPU, memory stays.
     this.session.setExtended(on);
     this.timedOut = false;
+    this.staleByReset = false;
     this.diagram.setExtended(on);
     this.spButton.hidden = !on;
     const box = document.querySelector<HTMLInputElement>('.extended-box');
@@ -1029,22 +1038,6 @@ export class App {
       h('p', {}, ev.explanation));
   }
 
-  /** Projector mode: large font and – because projectors show dark colours badly – the light theme. */
-  private toggleBeamer(): void {
-    this.beamer = !this.beamer;
-    if (this.beamer) {
-      this.themeBeforeBeamer = this.theme;
-      this.theme = 'light';
-    } else if (this.themeBeforeBeamer !== null) {
-      this.theme = this.themeBeforeBeamer;
-      this.themeBeforeBeamer = null;
-    }
-    this.applyTheme();
-    document.documentElement.classList.toggle('beamer', this.beamer);
-    this.persistSettings();
-    this.render();
-  }
-
   /** True if the page is shown dark right now (chosen, or "auto" and the system is dark). */
   private isDark(): boolean {
     return this.theme === 'dark' || (this.theme === 'auto' && window.matchMedia(DARK_QUERY).matches);
@@ -1056,7 +1049,6 @@ export class App {
    */
   private toggleTheme(): void {
     this.theme = this.isDark() ? 'light' : 'dark';
-    this.themeBeforeBeamer = null; // chosen by hand: keep it after the projector mode
     this.applyTheme();
     this.persistSettings();
   }

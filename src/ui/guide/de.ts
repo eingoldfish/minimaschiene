@@ -155,8 +155,6 @@ Werkzeugleiste und die Statuszeile.</p>
     <strong>Animationen</strong> lässt Werte bei Mikroschritten sichtbar über die Busse wandern.
     <strong>Erweiterter Modus</strong> schaltet Stackpointer und Stackbefehle ein.
     <strong>Anleitung</strong> öffnet diese Seite. Auf dem Handy liegt hier auch der Schalter für den dunklen Modus.</dd>
-  <dt>Beamer</dt>
-  <dd>Große Schrift und helle Farben für die Projektion im Klassenzimmer. Noch einmal klicken schaltet zurück.</dd>
   <dt>Hell/Dunkel</dt>
   <dd>Wechselt das Farbschema. Ohne eigene Wahl folgt die App der Einstellung des Systems.</dd>
   <dt>Flagge</dt>
@@ -250,7 +248,9 @@ ein Doppelklick stellt wieder halb und halb ein.</p>`,
 <ul>
   <li><strong><code>HALT</code></strong> (oder <code>HOLD</code>): Das Programm ist fertig. Der PC zeigt danach hinter den
     <code>HALT</code>-Befehl; im Editor bleibt die <code>HALT</code>-Zeile markiert.</li>
-  <li><strong><code>RESET</code></strong> im Programm: Akku, PC und Flags werden 0, die Maschine hält an.</li>
+  <li><strong><code>RESET</code></strong> im Programm: Akku, PC und Flags werden 0, der <strong>ganze Speicher wird gelöscht</strong>
+    (auch das Programm), die Maschine hält an. Zum erneuten Ausführen muss man neu assemblieren – oder mit „Schritt zurück“
+    zurückgehen, das holt auch den Speicher wieder.</li>
   <li><strong>Ungültiger Befehl:</strong> An der Adresse steht kein gültiger Befehlscode – meistens, weil ein
     <code>HALT</code> fehlt und das Programm in den Datenbereich läuft.</li>
   <li><strong>Division durch 0</strong> bei <code>DIV</code>, <code>MOD</code>, <code>DIVU</code>, <code>MODU</code> (und
@@ -275,6 +275,7 @@ wieder zurückgehen.</p>
     <tr><th scope="row">Zurücksetzen</th><td>auf 0 (SP auf 65534)</td><td>bleibt</td></tr>
     <tr><th scope="row">Speicher löschen</th><td>bleiben</td><td>alles 0 (65534/65535 = −1)</td></tr>
     <tr><th scope="row">Assemblieren</th><td>auf 0</td><td>gelöscht, dann Programm ab Adresse 0</td></tr>
+    <tr><th scope="row">Befehl <code>RESET</code> im Programm</th><td>auf 0, Maschine hält an</td><td>alles 0 (65534/65535 = −1) – auch das Programm</td></tr>
     <tr><th scope="row">… und Speicher behalten</th><td>auf 0</td><td>bleibt, nur die Programmzellen werden überschrieben</td></tr>
     <tr><th scope="row">Erweiterten Modus umschalten</th><td>auf 0</td><td>bleibt (danach neu assemblieren)</td></tr>
   </tbody>
@@ -499,7 +500,8 @@ zurückgesetzt; danach muss man neu assemblieren. Stackbefehle ohne erweiterten 
   <li><code>PUSH</code>: erst SP − 1, dann Akku → Speicher[SP]. <code>POP</code>: erst Speicher[SP] → Akku, dann SP + 1.</li>
   <li><code>JSR adr</code> (auch <code>CALL</code>): SP − 1, die Rücksprungadresse (Adresse des nächsten Befehls) kommt auf
     den Stack, dann Sprung nach adr. <code>RTS</code> (auch <code>RETURN</code>): Adresse vom Stack in den PC, dann SP + 1.</li>
-  <li><code>RSV n</code> reserviert n Zellen (SP − n), z. B. für lokale Variablen; <code>REL n</code> gibt sie wieder frei (SP + n).</li>
+  <li><code>RSV $n</code> reserviert n Zellen (SP − n), z. B. für lokale Variablen; <code>REL $n</code> gibt sie wieder frei (SP + n).
+    Die Anzahl steht wie im Original mit <code>$</code>; <code>RSV 3</code> ohne <code>$</code> ist ein Fehler.</li>
   <li>Mit <code>n(SP)</code> greift man auf Werte im Stack zu: <code>0(SP)</code> ist das oberste Element, <code>1(SP)</code>
     das darunter usw.</li>
 </ul>
@@ -617,12 +619,9 @@ aller Befehle wurden mit dem Original abgeglichen. Unterschiede gibt es vor alle
 </ul>
 <h3>Anderes Verhalten</h3>
 <ul>
-  <li><strong>Befehl <code>RESET</code>:</strong> löscht im Original auch den Speicher; hier bleibt das Programm erhalten.</li>
   <li><strong>Division durch 0:</strong> Die Maschine hält mit einer Meldung am Befehl an (Original: Rücksetzen bzw. Weiterlaufen).</li>
   <li><strong>Abbruchschranke:</strong> greift nur bei Tempo „Maximal“.</li>
   <li><strong>Speicher bearbeiten</strong> geht immer, ohne eigenen Editiermodus.</li>
-  <li><strong><code>RSV</code>/<code>REL</code></strong> werden hier <code>RSV 3</code> geschrieben (Original: <code>RSV $3</code>)
-    und haben andere Opcodes – Programme damit sind nicht austauschbar.</li>
   <li><strong>Strengerer Assembler:</strong> Zahlen außerhalb von 16 Bit, <code>+5</code> oder unpassende Adressierungsarten
     (z. B. <code>NOOP 5</code>) sind Fehler beim Assemblieren statt erst beim Ausführen. Gemischte Schreibweise wie
     <code>Load</code> ist dagegen erlaubt.</li>

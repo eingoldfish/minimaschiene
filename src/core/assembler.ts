@@ -670,6 +670,10 @@ export function assemble(source: string, options: AssembleOptions = {}): Assembl
             `Jump instructions need an address: ‘${op.name} 20’, ‘${op.name} label’ or indirect ‘${op.name} (pointer)’.`);
         } else if (def.mnemonic === 'STORE' && mode === 'immediate') {
           hint = tr('STORE schreibt in eine Speicherzelle – lass das ‚$‘ weg.', 'STORE writes into a memory cell – leave out the ‘$’.');
+        } else if (def.modes.length === 1 && def.modes[0] === 'immediate') {
+          // RSV, REL: as in the original only with "$"
+          hint = tr(`Die Anzahl der Zellen wird mit ‚$‘ geschrieben, z. B. ‚${op.name} $3‘.`,
+            `The number of cells is written with ‘$’, e.g. ‘${op.name} $3’.`);
         }
         err(line, operand.column, operand.length,
           tr(`‚${op.name}‘ kann nicht mit ‚${syntaxExample(operand.syntax)}‘ benutzt werden.`,

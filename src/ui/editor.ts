@@ -181,6 +181,7 @@ const execLineField = StateField.define<DecorationSet>({
 function exampleFor(def: InstructionDef, name: string): string {
   if (def.modes.includes('none')) return name;
   if (name === def.immediateMnemonic) return `${name} 5`;
+  if (def.modes.length === 1 && def.modes[0] === 'immediate') return `${name} $2`; // RSV, REL
   const d = t();
   if (def.mnemonic === 'JSR') return `${name} ${d.exampleLabelSub}`;
   if (def.group === 'jump') return `${name} ${d.exampleLabelLoop}`;
@@ -211,12 +212,11 @@ function helpTooltip(word: string): HTMLElement | null {
   if (!found) return null;
   const { def } = found;
   const names = [def.mnemonic, ...def.aliases].join(' / ');
-  const isOwnShortForm = def.immediateMnemonic === def.mnemonic; // RSV, REL
-  add('strong', found.forcedMode && !isOwnShortForm ? d.helpShortForm(upper, def.mnemonic) : names);
+  add('strong', found.forcedMode ? d.helpShortForm(upper, def.mnemonic) : names);
   if (def.extendedOnly) add('p', d.helpExtendedOnly, 'cm-help-flags');
   add('p', def.description[lang]);
   add('p', d.helpFlags(def.flags[lang]), 'cm-help-flags');
-  if (!found.forcedMode && def.immediateMnemonic && !isOwnShortForm) {
+  if (!found.forcedMode && def.immediateMnemonic) {
     add('p', d.helpImmediate(def.immediateMnemonic), 'cm-help-flags');
   }
   add('code', d.helpExample(exampleFor(def, upper)));
