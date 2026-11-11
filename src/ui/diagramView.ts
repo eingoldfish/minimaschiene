@@ -213,8 +213,8 @@ export class DiagramView {
       decoded2 = tx().modes[ir.mode];
     }
     if (event?.phase === 'decode' && !def) decoded = tx().unknownInstruction;
-    t['decoder']!.textContent = decoded;
-    t['decoder2']!.textContent = decoded2;
+    fitText(t['decoder']!, decoded, DECODER_TEXT_WIDTH, 14, 0.6);
+    fitText(t['decoder2']!, decoded2, DECODER_TEXT_WIDTH, 14, 0.55);
 
     // Flags
     for (const f of ['z', 'n', 'v', 'c'] as const) {
@@ -376,4 +376,27 @@ export class DiagramView {
     this.element.append(t);
     return t;
   }
+}
+
+/** Usable text width inside the decoder box (box is 185 wide). */
+const DECODER_TEXT_WIDTH = 170;
+/** Smallest font size used to fit a text; below that it is cut off with "…". */
+const MIN_FONT_SIZE = 10;
+
+/**
+ * Sets the text of an SVG text element so that it fits into `maxWidth`:
+ * long texts get a smaller font size, very long ones are shortened with "…".
+ * The width is estimated from the number of characters (`charWidth` in em),
+ * so it also works while the diagram is hidden (not measurable then).
+ */
+function fitText(el: SVGTextElement, text: string, maxWidth: number, fontSize: number, charWidth: number): void {
+  const widthAt = (size: number, n: number): number => n * charWidth * size;
+  let size = fontSize;
+  if (widthAt(fontSize, text.length) > maxWidth) {
+    size = Math.max(MIN_FONT_SIZE, Math.floor((fontSize * maxWidth) / widthAt(fontSize, text.length) * 10) / 10);
+  }
+  const maxChars = Math.floor(maxWidth / (charWidth * size));
+  el.textContent = text.length > maxChars ? text.slice(0, Math.max(1, maxChars - 1)).trimEnd() + '…' : text;
+  if (size === fontSize) el.style.removeProperty('font-size');
+  else el.style.fontSize = `${size}px`;
 }

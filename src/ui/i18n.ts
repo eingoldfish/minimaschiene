@@ -412,7 +412,7 @@ const en: Dictionary = {
   controlBus: 'Control bus',
   busRead: 'read',
   busWrite: 'write',
-  fetching: 'fetching the instruction …',
+  fetching: 'fetching instruction …',
   unknownInstruction: 'unknown instruction!',
 
   memoryFormatLabel: 'Display of memory contents',
