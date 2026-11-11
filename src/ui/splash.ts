@@ -11,6 +11,11 @@ import { h } from './dom';
 const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const EASE_BACK = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 const EASE_IN = 'cubic-bezier(0.55, 0, 1, 0.45)';
+/** Overall tempo: all times below are multiplied by this (smaller = faster). */
+const TEMPO = 0.7;
+const ms = (t: number): number => t * TEMPO;
+/** Duration of the last part: the chip flies to the title while the app appears. */
+const MOVE_MS = 380;
 
 export function playSplash(title: string): void {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -59,28 +64,28 @@ export function playSplash(title: string): void {
       { transform: `translateX(${shift}px)` },
       { transform: `translateX(${shift}px)`, offset: 0.55 },
       { transform: 'translateX(0)' },
-    ], { duration: 1150, easing: 'ease-in-out' });
+    ], { duration: ms(1150), easing: 'ease-in-out' });
     body.animate([
       { transform: 'scale(0) rotate(-90deg)' },
       { transform: 'scale(1) rotate(0deg)' },
-    ], { duration: 550, easing: EASE_BACK, fill: 'backwards' });
+    ], { duration: ms(550), easing: EASE_BACK, fill: 'backwards' });
     core.animate([{ transform: 'scale(0)' }, { transform: 'scale(1)' }],
-      { duration: 350, delay: 350, easing: EASE_BACK, fill: 'backwards' });
+      { duration: ms(350), delay: ms(350), easing: EASE_BACK, fill: 'backwards' });
     for (const [pin, dir] of [[pinTop, 1], [pinBottom, -1]] as const) {
       pin.animate([
         { transform: `translateY(${dir * 100}%) scaleX(0.3)`, opacity: 0 },
         { transform: 'translateY(0) scaleX(1)', opacity: 1 },
-      ], { duration: 320, delay: 480, easing: EASE_OUT, fill: 'backwards' });
+      ], { duration: ms(320), delay: ms(480), easing: EASE_OUT, fill: 'backwards' });
     }
 
     // ----- type in the name -----
     const typed = letters.map((l, i) => l.animate([
       { opacity: 0, transform: 'translateY(0.5em) scale(0.6)' },
       { opacity: 1, transform: 'translateY(0) scale(1)' },
-    ], { duration: 260, delay: 650 + i * 55, easing: EASE_BACK, fill: 'backwards' }));
+    ], { duration: ms(260), delay: ms(650 + i * 55), easing: EASE_BACK, fill: 'backwards' }));
     await typed[typed.length - 1]?.finished;
     if (ended) return;
-    await wait(550);
+    await wait(ms(550));
     if (ended) return;
 
     // ----- take the name apart: letters fold back into the chip, last one first -----
@@ -91,12 +96,12 @@ export function playSplash(title: string): void {
       return l.animate([
         { opacity: 1, transform: 'translateX(0) rotateY(0deg) scale(1)' },
         { opacity: 0, transform: `translateX(${dx}px) rotateY(90deg) scale(0.2)` },
-      ], { duration: 380, delay: (letters.length - 1 - i) * 45, easing: EASE_IN, fill: 'forwards' });
+      ], { duration: ms(380), delay: ms((letters.length - 1 - i) * 45), easing: EASE_IN, fill: 'forwards' });
     });
     // the chip "swallows" each letter with a small pulse
     chip.animate([
       { transform: 'scale(1)' }, { transform: 'scale(1.08)' }, { transform: 'scale(0.96)' }, { transform: 'scale(1)' },
-    ], { duration: 700, delay: 250, easing: 'ease-in-out' });
+    ], { duration: ms(700), delay: ms(250), easing: 'ease-in-out' });
     await folded[0]?.finished;
     if (ended) return;
 
@@ -106,7 +111,7 @@ export function playSplash(title: string): void {
     const bg = getComputedStyle(overlay).backgroundColor;
     const moves: Animation[] = [
       overlay.animate([{ backgroundColor: bg }, { backgroundColor: 'transparent' }],
-        { duration: 650, easing: 'ease-in', fill: 'forwards' }),
+        { duration: MOVE_MS, easing: 'ease-in', fill: 'forwards' }),
     ];
     if (target) {
       const dx = target.x + target.size / 2 - (from.left + from.width / 2);
@@ -115,10 +120,10 @@ export function playSplash(title: string): void {
       moves.push(chip.animate([
         { transform: 'translate(0, 0) scale(1)' },
         { transform: `translate(${dx}px, ${dy}px) scale(${s})` },
-      ], { duration: 650, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' }));
+      ], { duration: MOVE_MS, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' }));
     } else {
       moves.push(chip.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.3)' }],
-        { duration: 400, easing: EASE_IN, fill: 'forwards' }));
+        { duration: MOVE_MS, easing: EASE_IN, fill: 'forwards' }));
     }
     await Promise.all(moves.map((a) => a.finished));
   }
