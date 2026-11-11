@@ -12,6 +12,7 @@ import './styles.css';
 import { App } from './ui/app';
 import { t } from './ui/i18n';
 import { playSplash } from './ui/splash';
+import { installClickSounds } from './ui/sound';
 
 const root = document.querySelector<HTMLElement>('#app');
 if (!root) {
@@ -19,6 +20,7 @@ if (!root) {
 }
 try {
   new App(root);
+  installClickSounds(); // once for the page (the app is rebuilt on a language switch)
   // Start animation: only here, i.e. when the page is loaded or reloaded.
   playSplash(t().appTitle);
 } catch (error) {

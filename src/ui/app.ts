@@ -16,6 +16,7 @@ import { defaultProgram, getExamples, isExampleSource, translateExample } from '
 import { defaultLanguage, keys, setLanguage, t } from './i18n';
 import { menu, menuItemWithInfo } from './menu';
 import { bookIcon, checkIcon, copyIcon, exitFullscreenIcon, flagIcon, fullscreenIcon, maximizeIcon, restoreIcon } from './icons';
+import { playSound, setSoundEnabled } from './sound';
 import { machineAsText, MachineView, type MachineViewOptions } from './machineView';
 import { MemoryView } from './memoryView';
 import { memoryAsTable, type MemoryFormat } from './memoryTable';
@@ -95,6 +96,8 @@ export class App {
   private limitSeconds = 5;
   private theme: Theme = 'auto';
   private animations = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /** Click sounds and short signal tones (see sound.ts). */
+  private sound = true;
   private machineTab: 'diagram' | 'registers' = 'diagram';
   /** Extended mode: stack pointer and stack instructions. */
   private extended = false;
@@ -223,6 +226,9 @@ export class App {
             menuItemWithInfo(h('label', { class: 'check', title: d.animationsTitle },
               h('input', { type: 'checkbox', checked: this.animations, onchange: (ev: Event) => { this.animations = (ev.target as HTMLInputElement).checked; this.persistSettings(); } }),
               d.animations), d.animationsInfo(keys().microStep), d.infoAbout(d.animations)),
+            h('label', { class: 'check', title: d.soundTitle },
+              h('input', { type: 'checkbox', checked: this.sound, onchange: (ev: Event) => { this.sound = (ev.target as HTMLInputElement).checked; setSoundEnabled(this.sound); this.persistSettings(); } }),
+              d.sound),
             h('label', { class: 'check', title: d.extendedTitle },
               h('input', { type: 'checkbox', checked: this.extended, class: 'extended-box', onchange: (ev: Event) => this.setExtended((ev.target as HTMLInputElement).checked) }),
               d.extended),
@@ -432,7 +438,7 @@ export class App {
     this.updateFileName();
     this.setMachineTab(this.machineTab);
     if (carry) {
-      this.setStatus(d.languageChanged, 'info', true, !carry.statusShown);
+      this.setStatus(d.languageChanged, 'info', true, { animate: !carry.statusShown });
       this.render();
       // after a language switch in the guide: open it again at the same place
       void this.syncGuide().then(() => { if (this.guide?.element.isConnected) window.scrollTo(0, carry.scrollY); });
@@ -790,6 +796,8 @@ export class App {
     const bool = (key: string, fallback: boolean) => (typeof saved[key] === 'boolean' ? (saved[key] as boolean) : fallback);
     this.detailed = bool('detailed', this.detailed);
     this.animations = bool('animations', this.animations);
+    this.sound = bool('sound', this.sound);
+    setSoundEnabled(this.sound);
     this.extended = bool('extended', this.extended);
     this.hexAddresses = bool('hexAddresses', this.hexAddresses);
     this.followPc = bool('followPc', this.followPc);
@@ -814,6 +822,7 @@ export class App {
     saveSettings({
       detailed: this.detailed,
       animations: this.animations,
+      sound: this.sound,
       extended: this.extended,
       hexAddresses: this.hexAddresses,
       followPc: this.followPc,
@@ -1054,6 +1063,7 @@ export class App {
         break;
       case 'breakpoint':
         this.setStatus(t().stopBreakpoint(String(this.session.currentLine ?? '?')), 'info');
+        playSound('ping');
         break;
       case 'none':
         break;
@@ -1066,7 +1076,7 @@ export class App {
     this.autosaveTimer = window.setTimeout(() => saveSource(this.editor.getText()), 400);
     if (this.session.program && !this.programStale) {
       this.programStale = true;
-      this.setStatus(t().sourceChanged(keys().assemble), 'warning');
+      this.setStatus(t().sourceChanged(keys().assemble), 'warning', false, { sound: false }); // no tone while typing
       this.render();
     }
   }
@@ -1186,6 +1196,7 @@ export class App {
     const action = actions[key];
     if (action) {
       ev.preventDefault(); // e.g. F5 would reload the page
+      playSound('click'); // as if the button was pressed
       action();
     } else if (ev.key === 'Escape' && this.running) {
       this.toggleRun();
@@ -1280,8 +1291,12 @@ export class App {
    *        steps …): they disappear after a few seconds. Errors, warnings and
    *        messages that tell what to do next stay until the next message.
    */
-  /** @param animate false: show the message at once (e.g. in place of one that was visible before a rebuild) */
-  private setStatus(text: string, kind: StatusKind, transient = false, animate = true): void {
+  /**
+   * @param opts.animate false: show the message at once (e.g. in place of one that was visible before a rebuild)
+   * @param opts.sound false: no signal tone (success, warning and error messages have one)
+   */
+  private setStatus(text: string, kind: StatusKind, transient = false,
+    { animate = true, sound = true }: { animate?: boolean; sound?: boolean } = {}): void {
     window.clearTimeout(this.statusTimer);
     if (transient) this.statusTimer = window.setTimeout(() => this.setStatus('', 'info'), TRANSIENT_STATUS_MS);
     const el = this.statusEl;
@@ -1296,6 +1311,7 @@ export class App {
     el.textContent = text;
     el.className = `status status-${kind}`;
     el.hidden = false;
+    if (sound && kind !== 'info') playSound(kind);
     if (!animate) return;
     if (wasShown) this.animateStatusResize(oldHeight);
     else this.animateStatusIn();
