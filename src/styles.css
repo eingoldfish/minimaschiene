@@ -1068,6 +1068,29 @@ button.lang-btn {
   line-height: 1;
 }
 
+/* Flag and fullscreen button: as tall as the light/dark switch next to them */
+button.lang-btn,
+button.fullscreen-btn {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.6rem;
+  padding: 0 0.3rem;
+}
+
+/* The visible flag and arrows: a bit smaller than the switch */
+button.lang-btn .flag-icon {
+  width: auto;
+  height: 1.4rem;
+}
+
+button.fullscreen-btn .icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  stroke-width: 1.5;
+}
+
 /* Phones: narrow gutters in the editor, so more of the code fits */
 @media (max-width: 600px) {
   .cm-editor .cm-gutters {

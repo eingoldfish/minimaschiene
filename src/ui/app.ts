@@ -1122,7 +1122,10 @@ export class App {
     this.fullscreenButton.title = title;
     this.fullscreenButton.setAttribute('aria-label', title);
     this.fullscreenButton.setAttribute('aria-pressed', String(on));
-    this.fullscreenButton.replaceChildren(on ? exitFullscreenIcon() : fullscreenIcon());
+    const icon = on ? exitFullscreenIcon() : fullscreenIcon();
+    // crop the empty margin, so the arrows are as tall as the light/dark switch
+    icon.setAttribute('viewBox', '2.5 2.5 19 19');
+    this.fullscreenButton.replaceChildren(icon);
   }
 
   private updateMaximized(): void {
@@ -1179,9 +1182,89 @@ export class App {
   private setStatus(text: string, kind: StatusKind, transient = false): void {
     window.clearTimeout(this.statusTimer);
     if (transient) this.statusTimer = window.setTimeout(() => this.setStatus('', 'info'), TRANSIENT_STATUS_MS);
-    this.statusEl.textContent = text;
-    this.statusEl.className = `status status-${kind}`;
-    this.statusEl.hidden = text === '';
+    const el = this.statusEl;
+    const wasShown = !el.hidden && !el.classList.contains('status-leaving');
+    if (text === '') {
+      if (wasShown) this.animateStatusOut();
+      else el.hidden = true;
+      return;
+    }
+    const oldHeight = wasShown ? el.getBoundingClientRect().height : 0;
+    for (const a of el.getAnimations()) a.cancel();
+    el.textContent = text;
+    el.className = `status status-${kind}`;
+    el.hidden = false;
+    if (wasShown) this.animateStatusResize(oldHeight);
+    else this.animateStatusIn();
+  }
+
+  /** True when the status line may be animated (visible on the page, motion allowed). */
+  private canAnimateStatus(): boolean {
+    return typeof this.statusEl.animate === 'function'
+      && this.statusEl.getClientRects().length > 0
+      && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  /**
+   * Appearing: first only the coloured bar on the left grows from top to
+   * bottom (the line makes room for itself at the same time), then the bar
+   * widens to the right and uncovers the rest of the message.
+   */
+  private animateStatusIn(): void {
+    if (!this.canAnimateStatus()) return;
+    const el = this.statusEl;
+    const cs = getComputedStyle(el);
+    const height = el.getBoundingClientRect().height;
+    const width = el.getBoundingClientRect().width;
+    const bar = parseFloat(cs.borderLeftWidth) || 4;
+    const closedRight = `inset(0 ${width - bar}px 0 0)`;
+    const growMs = 140;
+    const expandMs = 340;
+    // phase 1: room + bar grow downwards, the rest stays covered
+    el.animate([
+      { height: '0px', marginTop: '0px', paddingTop: '0px', paddingBottom: '0px', borderTopWidth: '0px', borderBottomWidth: '0px', overflow: 'hidden' },
+      { height: `${height}px`, marginTop: cs.marginTop, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, borderTopWidth: cs.borderTopWidth, borderBottomWidth: cs.borderBottomWidth, overflow: 'hidden' },
+    ], { duration: growMs, easing: 'cubic-bezier(0.2, 0, 0, 1)' });
+    // phase 2: bar widens to the right and reveals the message
+    el.animate([
+      { clipPath: closedRight },
+      { clipPath: closedRight, offset: growMs / (growMs + expandMs), easing: 'cubic-bezier(0.3, 0, 0, 1)' },
+      { clipPath: 'inset(0 0 0 0)' },
+    ], { duration: growMs + expandMs });
+  }
+
+  /** Vanishing: fades out upwards while the room it took closes gradually. */
+  private animateStatusOut(): void {
+    const el = this.statusEl;
+    if (!this.canAnimateStatus()) {
+      el.hidden = true;
+      return;
+    }
+    for (const a of el.getAnimations()) a.cancel();
+    const cs = getComputedStyle(el);
+    const height = el.getBoundingClientRect().height;
+    el.classList.add('status-leaving');
+    const anim = el.animate([
+      { height: `${height}px`, marginTop: cs.marginTop, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, borderTopWidth: cs.borderTopWidth, borderBottomWidth: cs.borderBottomWidth, opacity: 1, transform: 'translateY(0)', overflow: 'hidden' },
+      { opacity: 0, transform: `translateY(-${Math.round(height * 0.6)}px)`, offset: 0.6 },
+      { height: '0px', marginTop: '0px', paddingTop: '0px', paddingBottom: '0px', borderTopWidth: '0px', borderBottomWidth: '0px', opacity: 0, transform: `translateY(-${height}px)`, overflow: 'hidden' },
+    ], { duration: 240, easing: 'cubic-bezier(0.4, 0, 0.6, 1)' });
+    anim.onfinish = () => {
+      el.hidden = true;
+      el.classList.remove('status-leaving');
+    };
+    anim.oncancel = () => el.classList.remove('status-leaving');
+  }
+
+  /** A new message replaces a visible one: only the height changes smoothly. */
+  private animateStatusResize(oldHeight: number): void {
+    if (!this.canAnimateStatus()) return;
+    const newHeight = this.statusEl.getBoundingClientRect().height;
+    if (Math.abs(newHeight - oldHeight) < 1) return;
+    this.statusEl.animate([
+      { height: `${oldHeight}px`, overflow: 'hidden' },
+      { height: `${newHeight}px`, overflow: 'hidden' },
+    ], { duration: 150, easing: 'ease-out' });
   }
 
   private render(): void {
