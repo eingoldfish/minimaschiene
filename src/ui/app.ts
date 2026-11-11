@@ -239,7 +239,8 @@ export class App {
           h('label', { class: 'field', title: d.limitTitle },
             d.limit, limitInput, 's'))));
 
-    this.statusEl = h('div', { class: 'status', role: 'status', 'aria-live': 'polite' });
+    // starts hidden, so the first message (also after a language switch) grows in
+    this.statusEl = h('div', { class: 'status', role: 'status', 'aria-live': 'polite', hidden: true });
 
     // ----- editor panel -----
     const editorHost = h('div', { class: 'editor-host' });
