@@ -14,7 +14,7 @@ import { openFile, saveFile, type SaveTarget } from '../storage/files';
 import { decodeShare, encodeShare } from '../storage/share';
 import { defaultProgram, getExamples, isExampleSource } from './examples';
 import { defaultLanguage, keys, setLanguage, t } from './i18n';
-import { menu, menuHeading, menuItemWithInfo } from './menu';
+import { menu, menuItemWithInfo } from './menu';
 import { bookIcon, checkIcon, copyIcon, exitFullscreenIcon, flagIcon, fullscreenIcon, maximizeIcon, restoreIcon } from './icons';
 import { MachineView } from './machineView';
 import { MemoryView } from './memoryView';
@@ -247,11 +247,11 @@ export class App {
     const fileMenu = menu(d.fileMenu, { class: 'small', title: d.fileMenuTitle },
       button(d.open, () => void this.openProgram(), { key: k.open, title: d.openTitle }),
       button(d.save, () => void this.saveProgram(), { key: k.save, title: d.saveTitle }),
-      button(d.share, () => void this.shareProgram(), { title: d.shareTitle }),
-      menuHeading(d.loadExampleLabel),
-      ...getExamples(this.language).map((e) => button(e.title, () => this.loadExample(e.id), { title: e.description }))).element;
+      button(d.share, () => void this.shareProgram(), { title: d.shareTitle })).element;
+    const examplesButton = button(d.examplesButton, () => this.openExamples(), { class: 'small', title: d.examplesTitle });
     const fileBar = h('div', { class: 'file-bar' },
       fileMenu,
+      examplesButton,
       this.copyButton(d.copyCodeTitle, () => this.copyCode()),
       this.fileNameEl);
     this.errorList = h('ul', { class: 'error-list', hidden: true, 'aria-label': d.errorsLabel });
@@ -604,6 +604,46 @@ export class App {
     this.updateFileName();
     this.autosaveNow();
     this.render();
+  }
+
+  /** Small pop-up window in the middle of the screen with all examples. */
+  private openExamples(): void {
+    const d = t();
+    const dialog = h('dialog', { class: 'examples-dialog', 'aria-labelledby': 'examples-heading' });
+    const close = (): void => dialog.close();
+    dialog.append(
+      h('div', { class: 'examples-head' },
+        h('h2', { id: 'examples-heading' }, d.examplesButton),
+        h('button', { type: 'button', class: 'small icon-btn examples-close', title: d.examplesClose, 'aria-label': d.examplesClose, onclick: close }, '✕')),
+      h('p', { class: 'examples-hint' }, d.examplesHint),
+      h('ul', { class: 'examples-list' },
+        ...getExamples(this.language).map((e) => h('li', {},
+          h('button', {
+            type: 'button',
+            class: 'example-card',
+            onclick: () => { close(); this.loadExample(e.id); },
+          },
+          h('span', { class: 'example-title' }, e.title,
+            // badge only if the title does not say it already
+            e.extended && !e.title.toLowerCase().includes(d.examplesExtended.toLowerCase())
+              ? h('span', { class: 'example-badge' }, d.examplesExtended) : null),
+          h('span', { class: 'example-desc' }, e.description))))));
+    // A click on the dimmed background (outside the window) closes it, too.
+    dialog.addEventListener('click', (ev) => { if (ev.target === dialog) close(); });
+    // Many examples: the list scrolls; soft edges show that there is more above/below.
+    const list = dialog.querySelector<HTMLElement>('.examples-list')!;
+    const updateEdges = (): void => {
+      list.classList.toggle('more-above', list.scrollTop > 2);
+      list.classList.toggle('more-below', list.scrollTop + list.clientHeight < list.scrollHeight - 2);
+    };
+    list.addEventListener('scroll', updateEdges, { passive: true });
+    const resize = new ResizeObserver(updateEdges);
+    resize.observe(list);
+    dialog.addEventListener('close', () => { resize.disconnect(); dialog.remove(); });
+    document.body.append(dialog);
+    dialog.showModal();
+    updateEdges();
+    dialog.querySelector<HTMLElement>('.example-card')?.focus();
   }
 
   private loadExample(id: string): void {
